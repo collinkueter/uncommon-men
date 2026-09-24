@@ -8,6 +8,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
+import { categoriesWithActiveEvents } from "@/domain/catalog";
 import { BottomNav, Empty, PageShell, withDemo, scoreLabel } from "./shared";
 import { ThemedSelect } from "./ThemedSelect";
 
@@ -15,12 +16,13 @@ export function Events() {
   const { snapshot } = useConference();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
-  const events = snapshot.data.events.filter(
-    (e) =>
-      e.active &&
-      (category === "all" || e.categoryId === category) &&
-      e.name.toLowerCase().includes(search.toLowerCase()),
+  const activeEvents = snapshot.data.events.filter((event) => event.active);
+  const events = activeEvents.filter(
+    (event) =>
+      (category === "all" || event.categoryId === category) &&
+      event.name.toLowerCase().includes(search.toLowerCase()),
   );
+  const categories = categoriesWithActiveEvents(snapshot.data.categories, snapshot.data.events);
   const cat = (id: string) =>
     snapshot.data.categories.find((x) => x.id === id)?.name ?? "Competition";
   return (
@@ -47,7 +49,7 @@ export function Events() {
             onChange={setCategory}
             options={[
               { value: "all", label: "All categories" },
-              ...snapshot.data.categories.map((c) => ({ value: c.id, label: c.name })),
+              ...categories.map((c) => ({ value: c.id, label: c.name })),
             ]}
           />
         </div>

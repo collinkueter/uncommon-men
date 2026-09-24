@@ -23,7 +23,7 @@ export function ScoreEvent() {
   const { eventId = "" } = useParams();
   const { snapshot } = useConference();
   const event = snapshot.data.events.find((e) => e.id === eventId);
-  if (!event)
+  if (!event || !event.active)
     return (
       <PageShell>
         <Empty text="That event is unavailable." />

@@ -9,6 +9,16 @@ export const initialCategories: Category[] = [
   { id: "hand-eye-coordination", name: "Hand-Eye Coordination / Reflexes", group: "mental", order: 6 },
 ];
 
+export function categoriesWithActiveEvents(
+  categories: Category[],
+  events: Competition[],
+) {
+  const activeCategoryIds = new Set(
+    events.filter((event) => event.active).map((event) => event.categoryId),
+  );
+  return categories.filter((category) => activeCategoryIds.has(category.id));
+}
+
 const event = (
   id: string,
   categoryId: string,
