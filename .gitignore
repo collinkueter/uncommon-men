@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-emulator/
+.vite/
 .emulator-backup/
 .env*
 !.env.example
