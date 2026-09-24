@@ -1,0 +1,215 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public competition data contains display names and scores only. Authentication
+    // is required for writes. The admin role comes exclusively from a custom claim.
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function admin() { return signedIn() && request.auth.token.admin == true; }
+    function short(value, size) { return value is string && value.size() > 0 && value.size() <= size; }
+    function audited(type, id) {
+      return short(request.resource.data.auditId, 100)
+        && !exists(/databases/$(database)/documents/audit/$(request.resource.data.auditId))
+        && getAfter(/databases/$(database)/documents/audit/$(request.resource.data.auditId)).data.entityType == type
+        && getAfter(/databases/$(database)/documents/audit/$(request.resource.data.auditId)).data.entityId == id
+        && getAfter(/databases/$(database)/documents/audit/$(request.resource.data.auditId)).data.actorUid == request.auth.uid;
+    }
+    function validCategory(data) {
+      return data.keys().hasOnly(['name', 'group', 'order', 'auditId'])
+        && short(data.name, 80) && data.group in ['physical', 'mental']
+        && data.order is int && data.order >= 0 && data.order <= 1000 && short(data.auditId, 100);
+    }
+    function validEvent(data) {
+      return data.keys().hasOnly(['categoryId', 'name', 'kind', 'direction', 'unit', 'team', 'teamSize', 'instructions', 'active', 'auditId'])
+        && short(data.categoryId, 100) && short(data.name, 100)
+        && data.kind in ['count', 'duration', 'distance', 'bracket']
+        && data.direction in ['higher', 'lower'] && data.unit is string && data.unit.size() <= 30
+        && data.team is bool && data.teamSize is int && data.teamSize >= 0 && data.teamSize <= 20
+        && data.instructions is string && data.instructions.size() <= 4000
+        && data.active is bool && short(data.auditId, 100);
+    }
+    function validParticipant(data) {
+      return data.keys().hasOnly(['name', 'normalizedName', 'auditId'])
+        && short(data.name, 80) && short(data.normalizedName, 80) && short(data.auditId, 100);
+    }
+    function validTeam(data) {
+      return data.keys().hasOnly(['eventId', 'name', 'memberIds', 'auditId'])
+        && short(data.eventId, 100) && short(data.name, 80) && data.memberIds is list
+        && data.memberIds.size() <= 20 && short(data.auditId, 100);
+    }
+    function validTeamMembers(data) {
+      let event = getAfter(/databases/$(database)/documents/events/$(data.eventId)).data;
+      return event.team == true
+        && data.memberIds.toSet().size() == data.memberIds.size()
+        && (event.teamSize == 0 || data.memberIds.size() == event.teamSize)
+        && (data.memberIds.size() == 0 || existsAfter(/databases/$(database)/documents/participants/$(data.memberIds[0])))
+        && (data.memberIds.size() < 2 || existsAfter(/databases/$(database)/documents/participants/$(data.memberIds[1])));
+    }
+    function validAttempt(data) {
+      return data.keys().hasOnly(['eventId', 'participantId', 'value', 'valid', 'recordedBy', 'recorderName', 'createdAt', 'updatedAt', 'revision', 'requestId', 'auditId'])
+        && short(data.eventId, 100) && short(data.participantId, 100) && data.value is number
+        && data.value >= 0 && data.value <= 1000000000 && data.valid is bool
+        && short(data.recordedBy, 128)
+        && short(data.recorderName, 80) && data.createdAt is timestamp && data.updatedAt is timestamp
+        && data.createdAt <= request.time && data.updatedAt <= request.time
+        && data.revision is int && data.revision >= 1 && data.revision <= 10000
+        && short(data.requestId, 100) && short(data.auditId, 100);
+    }
+    function validBracket(data) {
+      return data.keys().hasOnly(['eventId', 'entrants', 'matches', 'status', 'revision', 'auditId', 'lastMatchIndex', 'lastParentIndex', 'entrantsOpen'])
+        && short(data.eventId, 100) && data.entrants is list && data.entrants.size() >= 2 && data.entrants.size() <= 128
+        && data.matches is list && data.matches.size() >= 1 && data.matches.size() <= 255
+        && data.status in ['active', 'complete'] && data.revision is int && data.revision >= 1 && data.revision <= 10000
+        && data.get('entrantsOpen', false) is bool && short(data.auditId, 100);
+    }
+    // entrantsOpen is initialized by bracket creation/reseeding and closes on
+    // every result write. Legacy revision-1 brackets have not recorded results.
+    function validTeamAddition(data) {
+      let teamId = data.entrants[data.entrants.size() - 1];
+      let event = get(/databases/$(database)/documents/events/$(data.eventId)).data;
+      return admin() && resource.data.status == 'active' && data.status == 'active'
+        && resource.data.get('entrantsOpen', resource.data.revision == 1) == true
+        && data.entrantsOpen == true
+        && data.entrants.size() == resource.data.entrants.size() + 1
+        && data.entrants.toSet().size() == data.entrants.size()
+        && data.entrants.removeAll([teamId]) == resource.data.entrants
+        && short(teamId, 100) && event.team == true && event.kind == 'bracket'
+        && get(/databases/$(database)/documents/teams/$(teamId)).data.eventId == data.eventId
+        && getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data.action == 'addBracketTeam';
+    }
+    function changedOnlyWinner(oldMatch, newMatch) {
+      return oldMatch.winnerId == null && oldMatch.bye == false
+        && oldMatch.sideA != null && oldMatch.sideB != null
+        && newMatch.diff(oldMatch).affectedKeys().hasOnly(['winnerId'])
+        && newMatch.winnerId in [oldMatch.sideA, oldMatch.sideB];
+    }
+    function validFinalWinner(data, oldMatches, newMatches, index, oldMatch, newMatch) {
+      return index == oldMatches.size() - 1 && data.lastParentIndex == -1
+        && data.status == 'complete'
+        && oldMatches.removeAll([oldMatch]) == newMatches.removeAll([newMatch]);
+    }
+    function validParentAdvance(data, oldMatches, newMatches, index, oldMatch, newMatch) {
+      let parentIndex = data.lastParentIndex;
+      let oldParent = oldMatches[parentIndex];
+      let newParent = newMatches[parentIndex];
+      return index < oldMatches.size() - 1 && parentIndex > index && parentIndex < oldMatches.size()
+        && oldParent.round == oldMatch.round + 1
+        && oldParent.position * 2 == oldMatch.position - (oldMatch.position % 2)
+        && oldParent.winnerId == null && oldParent.bye == false
+        && ((oldMatch.position % 2 == 0
+              && oldParent.sideA == null && newParent.sideA == newMatch.winnerId
+              && newParent.diff(oldParent).affectedKeys().hasOnly(['sideA']))
+            || (oldMatch.position % 2 == 1
+              && oldParent.sideB == null && newParent.sideB == newMatch.winnerId
+              && newParent.diff(oldParent).affectedKeys().hasOnly(['sideB'])))
+        && data.status == 'active'
+        && oldMatches.removeAll([oldMatch, oldParent]) == newMatches.removeAll([newMatch, newParent]);
+    }
+    function validWinnerAdvance(data) {
+      let oldMatches = resource.data.matches;
+      let newMatches = data.matches;
+      let index = data.lastMatchIndex;
+      let oldMatch = oldMatches[index];
+      let newMatch = newMatches[index];
+      return data.diff(resource.data).affectedKeys().hasOnly(['matches', 'status', 'revision', 'auditId', 'lastMatchIndex', 'lastParentIndex', 'entrantsOpen'])
+        && newMatches.size() == oldMatches.size()
+        && index is int && index >= 0 && index < oldMatches.size()
+        && data.lastParentIndex is int
+        && changedOnlyWinner(oldMatch, newMatch)
+        && (validFinalWinner(data, oldMatches, newMatches, index, oldMatch, newMatch)
+            || validParentAdvance(data, oldMatches, newMatches, index, oldMatch, newMatch));
+    }
+    function validAudit(data) {
+      return data.keys().hasOnly(['action', 'entityType', 'entityId', 'actorUid', 'actorName', 'at', 'before', 'after', 'reason'])
+        && short(data.action, 80) && data.entityType in ['categories', 'events', 'participants', 'teams', 'attempts', 'brackets', 'identities']
+        && short(data.entityId, 128) && data.actorUid == request.auth.uid && short(data.actorName, 80)
+        && data.at is timestamp && data.at == request.time && data.reason is string && data.reason.size() <= 500
+        && getAfter(/databases/$(database)/documents/identities/$(request.auth.uid)).data.name == data.actorName;
+    }
+    function validIdentity(data) {
+      return data.keys().hasOnly(['uid', 'name', 'participantId', 'auditId'])
+        && data.uid == request.auth.uid && short(data.name, 80)
+        && (data.participantId == null || short(data.participantId, 128)) && short(data.auditId, 100);
+    }
+    function auditPointsBack(auditId, data) {
+      let target = /databases/$(database)/documents/$(data.entityType)/$(data.entityId);
+      return getAfter(target).data.auditId == auditId
+        && data.after == getAfter(target).data
+        && ((!exists(target) && data.before == null) || (exists(target) && data.before == get(target).data));
+    }
+
+    match /categories/{id} {
+      allow read: if true;
+      allow create, update: if admin() && validCategory(request.resource.data) && audited('categories', id);
+      allow delete: if false;
+    }
+    match /events/{id} {
+      allow read: if true;
+      allow create, update: if admin() && validEvent(request.resource.data) && audited('events', id);
+      allow delete: if false;
+    }
+    match /participants/{id} {
+      allow read: if true;
+      allow create: if signedIn() && validParticipant(request.resource.data) && audited('participants', id);
+      allow update: if admin() && validParticipant(request.resource.data) && audited('participants', id);
+      allow delete: if false;
+    }
+    match /teams/{id} {
+      allow read: if true;
+      allow create: if signedIn() && validTeam(request.resource.data) && validTeamMembers(request.resource.data) && audited('teams', id);
+      allow update: if admin() && validTeam(request.resource.data) && validTeamMembers(request.resource.data) && audited('teams', id);
+      allow delete: if false;
+    }
+    match /attempts/{id} {
+      allow read: if true;
+      allow create: if signedIn() && validAttempt(request.resource.data)
+        && request.resource.data.recordedBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/identities/$(request.auth.uid)).data.name == request.resource.data.recorderName
+        && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.active == true
+        && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.kind != 'bracket'
+        && ((getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.team == false
+              && existsAfter(/databases/$(database)/documents/participants/$(request.resource.data.participantId)))
+            || (getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.team == true
+              && existsAfter(/databases/$(database)/documents/teams/$(request.resource.data.participantId))))
+        && (getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.kind != 'count'
+            || request.resource.data.value is int)
+        && request.resource.data.requestId == id && request.resource.data.revision == 1
+        && request.resource.data.valid == true && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time && audited('attempts', id);
+      allow update: if admin() && validAttempt(request.resource.data)
+        && request.resource.data.recordedBy == resource.data.recordedBy
+        && request.resource.data.recorderName == resource.data.recorderName
+        && request.resource.data.eventId == resource.data.eventId
+        && request.resource.data.participantId == resource.data.participantId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.requestId == resource.data.requestId
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.updatedAt == request.time && audited('attempts', id);
+      allow delete: if false;
+    }
+    match /brackets/{id} {
+      allow read: if true;
+      allow create: if admin() && validBracket(request.resource.data) && audited('brackets', id);
+      allow update: if signedIn() && validBracket(request.resource.data)
+        && request.resource.data.eventId == resource.data.eventId
+        && request.resource.data.revision == resource.data.revision + 1
+        && ((request.resource.data.entrants == resource.data.entrants
+              && request.resource.data.get('entrantsOpen', false) == false
+              && (admin() || validWinnerAdvance(request.resource.data)))
+            || validTeamAddition(request.resource.data))
+        && audited('brackets', id);
+      allow delete: if false;
+    }
+    match /audit/{id} {
+      allow read: if admin();
+      allow create: if signedIn() && validAudit(request.resource.data) && auditPointsBack(id, request.resource.data);
+      allow update, delete: if false;
+    }
+    match /identities/{id} {
+      allow read: if isOwner(id);
+      allow create, update: if isOwner(id) && validIdentity(request.resource.data) && audited('identities', id);
+      allow delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

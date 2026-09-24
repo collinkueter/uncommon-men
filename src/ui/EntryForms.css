@@ -1,0 +1,65 @@
+/* Shared form rhythm for the compact scoring and welcome flows. */
+.entry-field {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.entry-field > label {
+  display: block;
+  margin: 0;
+  font-weight: 600;
+}
+
+.scoring .event-instructions {
+  margin: 1.1rem 0 1.8rem;
+}
+
+.scoring .competitor-field {
+  margin-top: 0;
+}
+
+.scoring .recorded {
+  margin: 0.7rem 0 0;
+}
+
+.competitor {
+  min-height: var(--control-height);
+}
+
+.competitor input {
+  min-width: 0;
+}
+
+.competitor button {
+  min-height: var(--control-height);
+  flex: 0 0 auto;
+}
+
+.value-input {
+  gap: 0.65rem;
+}
+
+.welcome-name-field {
+  margin-top: 1.8rem;
+}
+
+.welcome-name-field input {
+  margin-top: 0;
+}
+
+.welcome .primary {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+  min-height: var(--control-height);
+}
+
+@media (max-width: 480px) {
+  .welcome .primary {
+    padding-inline: 0.9rem;
+  }
+
+  .competitor button {
+    padding-inline: 0.8rem;
+  }
+}

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-emulator/
+.emulator-backup/
+.env*
+!.env.example
+.firebase/
+*-debug.log
+*.tsbuildinfo
+coverage/
+test-results/
+.DS_Store
+artifacts/demo/
+artifacts/verification/
+docs/screenshots/

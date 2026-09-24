@@ -1,0 +1,74 @@
+{
+  "firestore": {
+    "database": "conference",
+    "location": "us-central1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json",
+    "edition": "enterprise"
+  },
+  "auth": {
+    "authorizedDomains": [
+      "localhost",
+      "uncommon-men.firebaseapp.com",
+      "uncommon-men.web.app",
+      "uncommon-men--review-bnh40gxr.web.app"
+    ],
+    "providers": {
+      "anonymous": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Uncommon Men",
+        "supportEmail": "collinkueter@collality.com"
+      }
+    }
+  },
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          }
+        ]
+      },
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public,max-age=31536000,immutable"
+          }
+        ]
+      }
+    ]
+  },
+  "emulators": {
+    "auth": {
+      "port": 9199
+    },
+    "firestore": {
+      "port": 8180
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4100
+    }
+  }
+}
