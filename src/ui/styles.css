@@ -213,7 +213,7 @@ nav a:hover,
 }
 .filters {
   display: grid;
-  grid-template-columns: 1.5fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.8rem;
   margin: 1.4rem 0;
 }
@@ -496,7 +496,7 @@ a:focus-visible {
   margin: 0.35rem 0;
 }
 .value-input {
-  margin: 2rem 0 !important;
+  margin: 2rem 0;
 }
 .previous {
   text-align: center;
@@ -683,7 +683,7 @@ a:focus-visible {
 }
 .stand-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 1px solid #ffffff2b;
   margin: 2rem auto;
   width: min(100%, 1100px);
@@ -698,6 +698,7 @@ a:focus-visible {
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+.stand-tabs button:last-child { border-right: 0; }
 .stand-tabs button.active {
   background: var(--color-accent);
   color: #111;
@@ -1065,7 +1066,7 @@ a:focus-visible {
     display: block;
   }
   .stand-title h1 {
-    font-size: 3.2rem;
+    font-size: clamp(2.5rem, 8vw, 2.9rem);
   }
   .stand-title .standings-filter {
     max-width: none;
@@ -1096,9 +1097,10 @@ a:focus-visible {
     display: block;
   }
   .admin > aside {
-    display: flex;
-    overflow: auto;
-    padding: 0.2rem 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.5rem;
     border-bottom: 1px solid #ffffff1d;
   }
   .admin > aside h2 {
@@ -1106,9 +1108,13 @@ a:focus-visible {
   }
   .admin > aside > button:last-child { margin-top: 0; }
   .admin > aside button {
-    width: auto;
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+    text-align: center;
     white-space: nowrap;
-    padding: 0.75rem;
+    padding: 0.65rem 0.3rem;
+    font-size: 0.9rem;
   }
   .admin > aside button svg {
     display: none;
@@ -1294,6 +1300,21 @@ a:focus-visible {
   .presentation-controls .button {
     min-height: 40px;
   }
+}
+@media (min-width: 761px) and (max-height: 760px) {
+  .present-head .brand { font-size: 2.9rem; }
+  .present-tagline { margin: 0.1rem 0 0; }
+  .stand-tabs { margin: 0.25rem auto; }
+  .stand-title { min-height: 40px; margin: 0.2rem 0; }
+  .stand-title h1 { font-size: 2.7rem; }
+  .stand-event-icon { width: 52px; height: 52px; }
+  .stand-event-icon svg { width: 32px; height: 32px; }
+  .standing-row { min-height: 48px; }
+  .standing-row b { font-size: 2rem; }
+  .standing-row strong { font-size: 2.2rem; }
+  .standing-row span { font-size: 1.9rem; }
+  .presentation-controls { margin-top: 0.35rem; }
+  .page-indicator { margin-top: 0.25rem; }
 }
 .match {
   cursor: pointer;

@@ -124,6 +124,7 @@
 @media (max-width: 700px) {
   .bracket-page .bracket-scroll-hint { display: none; }
   .bracket-page .bracket-header { margin-bottom: 1.5rem; }
+  .bracket-page .bracket-header h1 { font-size: clamp(2.5rem, 10vw, 3.3rem); line-height: .95; margin: .5rem 0 .75rem; }
   .bracket-page .bracket-workspace-heading h2 { font-size: 1.75rem; }
   .bracket-page .round-nav { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0 .5rem; }
   .bracket-page .round-nav button { min-height: 44px; padding: .65rem .85rem; border: 1px solid #ffffff40; border-radius: var(--radius-sm); color: var(--color-text); background: var(--color-surface); font: 600 .9rem/1.2 var(--font-body); }

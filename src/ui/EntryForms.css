@@ -10,11 +10,19 @@
   font-weight: 600;
 }
 
+.scoring .scoring-pills {
+  margin: 0.5rem 0 1.25rem;
+}
+
 .scoring .event-instructions {
-  margin: 1.1rem 0 1.8rem;
+  margin: 0 0 1.35rem;
 }
 
 .scoring .competitor-field {
+  margin-top: 0;
+}
+
+.scoring .competitor-field > label {
   margin-top: 0;
 }
 
@@ -37,6 +45,44 @@
 
 .value-input {
   gap: 0.65rem;
+}
+
+.scoring .value-input {
+  margin: 1.5rem 0;
+}
+
+.scoring .timer {
+  margin-top: 0.35rem;
+}
+
+.scoring .timer output {
+  margin-top: 1.25rem;
+}
+
+.scoring .timer .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  line-height: 1;
+}
+
+.scoring .timer .button svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex: 0 0 auto;
+}
+
+.scoring .previous {
+  margin: 0.85rem 0 0.65rem;
+}
+
+.scoring .save {
+  margin: 0.75rem 0 1rem;
+}
+
+.scoring .attempt-toggle {
+  margin: 0.5rem auto 1rem;
 }
 
 .welcome-name-field {
