@@ -5,9 +5,11 @@ import {
   connectAuthEmulator,
   getAuth,
   getIdTokenResult,
+  linkWithPopup,
   onAuthStateChanged,
   setPersistence,
   signInAnonymously,
+  signInWithCredential,
   signInWithPopup,
   signOut,
   type Auth,
@@ -215,6 +217,7 @@ abstract class BaseStore implements ConferenceStore {
     this.emit();
   };
   abstract execute(command: Command): Promise<void>;
+  abstract signInWithGoogle(preferredName?: string): Promise<void>;
   abstract signInAdmin(): Promise<void>;
   abstract signOutAdmin(): Promise<void>;
   abstract dispose(): void;
@@ -525,6 +528,16 @@ class DemoStore extends BaseStore {
       throw error;
     }
   }
+  async signInWithGoogle(preferredName?: string) {
+    const identity = this.snapshot.identity!;
+    const name = identity.name || preferredName?.trim() || "Demo Google User";
+    if (!identity.name) await this.execute({ type: "identity", name });
+    this.snapshot = {
+      ...this.snapshot,
+      identity: { ...this.snapshot.identity!, email: "demo@example.com" },
+    };
+    this.emit();
+  }
   async signInAdmin() {
     this.snapshot = {
       ...this.snapshot,
@@ -555,6 +568,7 @@ class FirebaseStore extends BaseStore {
   private authRetryTimer?: ReturnType<typeof setTimeout>;
   private authRetryDelay = 0;
   private authErrorMessage: string | null = null;
+  private googleAccountInUse = false;
   private catalogReady = new Map<"categories" | "events", boolean>();
   private online = () => {
     this.snapshot = { ...this.snapshot, connected: true };
@@ -748,6 +762,7 @@ class FirebaseStore extends BaseStore {
           ? identityDocument.data().participantId || undefined
           : undefined,
         admin: token.claims.admin === true,
+        email: user.isAnonymous ? undefined : user.email || undefined,
       };
       this.snapshot = { ...this.snapshot, identity };
       if (identityDocument.exists()) this.emit();
@@ -1299,14 +1314,70 @@ class FirebaseStore extends BaseStore {
       throw error;
     }
   }
-  async signInAdmin() {
+  // Google sign-in upgrades the device's current account in place, so its
+  // name, participant link and results carry over. If that Google account is
+  // already in use (another device, or an administrator), switch to it.
+  async signInWithGoogle(preferredName?: string) {
     if (!this.auth) throw new Error("Firebase is not configured.");
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const current = this.auth.currentUser;
     try {
-      await signInWithPopup(this.auth, new GoogleAuthProvider());
+      if (!current?.isAnonymous || this.googleAccountInUse) {
+        this.googleAccountInUse = false;
+        await signInWithPopup(this.auth, provider);
+        return;
+      }
+      let linked: User;
+      try {
+        linked = (await linkWithPopup(current, provider)).user;
+      } catch (error) {
+        const inUse =
+          error instanceof FirebaseError &&
+          (error.code === "auth/credential-already-in-use" ||
+            error.code === "auth/email-already-in-use");
+        if (!inUse) throw error;
+        const credential = GoogleAuthProvider.credentialFromError(error);
+        if (credential) {
+          await signInWithCredential(this.auth, credential);
+          return;
+        }
+        // A second popup here would be blocked on phones (no fresh tap), so
+        // the next tap signs straight into the existing Google account.
+        this.googleAccountInUse = true;
+        throw new GoogleAccountInUse();
+      }
+      const identity = this.snapshot.identity;
+      if (!identity || identity.uid !== linked.uid) return;
+      this.snapshot = {
+        ...this.snapshot,
+        identity: { ...identity, email: linked.email || undefined },
+      };
+      this.emit();
+      const name = identity.name || preferredName?.trim() || linked.displayName?.trim();
+      if (!identity.name && name) {
+        const normalized = normalizeName(name);
+        await this.execute({
+          type: "identity",
+          name,
+          participantId: this.snapshot.data.participants.find(
+            (participant) => participant.normalizedName === normalized,
+          )?.id,
+        });
+      }
     } catch (error) {
+      if (error instanceof GoogleAccountInUse) throw error;
+      if (
+        error instanceof FirebaseError &&
+        ["auth/popup-closed-by-user", "auth/cancelled-popup-request", "auth/user-cancelled"].includes(error.code)
+      )
+        throw error;
       this.fail(error);
       throw error;
     }
+  }
+  async signInAdmin() {
+    await this.signInWithGoogle();
   }
   async signOutAdmin() {
     if (!this.auth) return;
@@ -1333,6 +1404,9 @@ class FirebaseStore extends BaseStore {
 }
 
 class AlreadyRecorded extends Error {}
+export class GoogleAccountInUse extends Error {
+  code = "app/google-account-in-use";
+}
 
 // When two devices commit to the same document at the same instant (two
 // scorekeepers on one bracket, or two stations creating the same new

@@ -4,7 +4,7 @@ export interface Category { id: string; name: string; group: 'physical' | 'menta
 export interface Competition { id: string; categoryId: string; name: string; kind: ScoreKind; direction: Direction; unit: string; team: boolean; teamSize: number; instructions: string; active: boolean }
 export interface Participant { id: string; name: string; normalizedName: string }
 export interface Team { id: string; eventId: string; name: string; memberIds: string[] }
-export interface Identity { uid: string; name: string; participantId?: string; admin: boolean }
+export interface Identity { uid: string; name: string; participantId?: string; admin: boolean; email?: string }
 export interface Attempt { id: string; eventId: string; participantId: string; value: number; valid: boolean; recordedBy: string; recorderName: string; createdAt: number; updatedAt: number; revision: number }
 export interface Match { id: string; round: number; position: number; sideA: string | null; sideB: string | null; winnerId: string | null; bye: boolean }
 export interface Bracket { id: string; eventId: string; entrants: string[]; matches: Match[]; status: 'active' | 'complete'; revision: number; entrantsOpen?: boolean }
@@ -24,4 +24,4 @@ export type Command =
  | { type: 'startBracket'; eventId: string; entrantIds: string[] }
  | { type: 'addBracketTeam'; bracketId: string; teamId: string; revision: number }
  | { type: 'matchWinner'; bracketId: string; matchId: string; winnerId: string; revision: number; reason?: string };
-export interface ConferenceStore { getSnapshot(): AppSnapshot; subscribe(listener: () => void): () => void; execute(command: Command): Promise<void>; signInAdmin(): Promise<void>; signOutAdmin(): Promise<void>; clearError(): void; dispose(): void }
+export interface ConferenceStore { getSnapshot(): AppSnapshot; subscribe(listener: () => void): () => void; execute(command: Command): Promise<void>; signInWithGoogle(preferredName?: string): Promise<void>; signInAdmin(): Promise<void>; signOutAdmin(): Promise<void>; clearError(): void; dispose(): void }

@@ -12,6 +12,6 @@ export function useConference() {
   const store = useContext(Context);
   if (!store) throw new Error('ConferenceProvider is required.');
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  return { ...snapshot, snapshot, execute: store.execute.bind(store), signInAdmin: store.signInAdmin.bind(store), signOutAdmin: store.signOutAdmin.bind(store), clearError: store.clearError.bind(store) };
+  return { ...snapshot, snapshot, execute: store.execute.bind(store), signInWithGoogle: store.signInWithGoogle.bind(store), signInAdmin: store.signInAdmin.bind(store), signOutAdmin: store.signOutAdmin.bind(store), clearError: store.clearError.bind(store) };
 }
 if (import.meta.hot) import.meta.hot.dispose(() => { activeStore?.dispose(); activeStore = undefined; });
