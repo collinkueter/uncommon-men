@@ -5,6 +5,7 @@ import { useConference } from "@/lib/ConferenceContext";
 import type { Competition, Match } from "@/domain/types";
 import { canAddBracketEntrants, createBracket } from "@/domain/ranking";
 import { ParticipantPicker } from "./ParticipantPicker";
+import { HowToPlay } from "./HowToPlay";
 import { Button, PageShell, useMediaQuery, withDemo } from "./shared";
 import "./BracketRoster.css";
 
@@ -376,13 +377,11 @@ export function Bracket({ event }: { event: Competition }) {
             </span>
             <span>Single elimination</span>
           </div>
-          {event.instructions.trim() && (
-            <p className="event-instructions">{event.instructions}</p>
-          )}
           <p className="event-instructions">
             {event.team ? "Team championship. Separate from individual points." : "Individual championship. Counts toward overall points."}
           </p>
         </header>
+        <HowToPlay instructions={event.instructions} />
         {registrationOpen && (
           <section className="bracket-signup" aria-labelledby="bracket-signup-title">
             <h2 id="bracket-signup-title">SIGN UP</h2>

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import type { Competition } from "@/domain/types";
 import { useConference } from "@/lib/ConferenceContext";
 import { ParticipantPicker } from "./ParticipantPicker";
+import { HowToPlay } from "./HowToPlay";
 import { Button, Empty, PageShell, withDemo } from "./shared";
 import "./Knockout.css";
 
@@ -98,7 +99,7 @@ export function Knockout({ event }: { event: Competition }) {
         <Link className="back" to={withDemo("/events")}><ArrowLeft /> Events</Link>
         <h1>{event.name}</h1>
         <div className="pills scoring-pills"><span>Single-winner game</span></div>
-        {event.instructions.trim() && <p className="event-instructions">{event.instructions}</p>}
+        <HowToPlay instructions={event.instructions} />
 
         {(!game || game.status === "registration") && (
           <section className="knockout-panel" aria-labelledby="knockout-signup-title">

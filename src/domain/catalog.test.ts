@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Category, Competition } from "./types";
-import { categoriesWithActiveEvents } from "./catalog";
+import { categoriesWithActiveEvents, initialEvents } from "./catalog";
+import eventInstructions from "./eventInstructions.json";
 
 const categories: Category[] = [
   { id: "physical", name: "Physical", group: "physical", order: 1 },
@@ -25,5 +26,11 @@ describe("categoriesWithActiveEvents", () => {
     expect(categoriesWithActiveEvents(categories, [event("physical", true), event("athleticism", false)])).toEqual([
       categories[0],
     ]);
+  });
+});
+
+describe("initialEvents", () => {
+  it("uses the canonical HOW TO PLAY copy for every event", () => {
+    expect(Object.fromEntries(initialEvents.map((event) => [event.id, event.instructions]))).toEqual(eventInstructions);
   });
 });

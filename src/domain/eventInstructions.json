@@ -1,0 +1,18 @@
+{
+  "dumbbell-hold-15-lb": "Hold a 15 lb dumbbell in each hand. Stand tall and raise both arms out to the sides at shoulder height, parallel to the floor, with a slight elbow bend. The clock stops if you lean or either arm drops below shoulder height.",
+  "dumbbell-hold-20-lb": "Hold a 20 lb dumbbell in each hand. Stand tall and raise both arms out to the sides at shoulder height, parallel to the floor, with a slight elbow bend. The clock stops if you lean or either arm drops below shoulder height.",
+  "push-up": "Keep your body straight from shoulders to ankles. Lower as one unit until your upper arms are parallel to the floor, then rise until your elbows fully extend. Only complete, straight-body repetitions count.",
+  "single-arm-bicep-curl-20-lb": "Use a 20-pound dumbbell for single-arm bicep curls. Record the number of completed reps.",
+  "plank-holds": "Rest on your forearms and toes with elbows beneath your shoulders. Keep a straight line from head to heels; do not lift a hand or foot, let your hips sag, or raise them. Time ends when you lose the position.",
+  "cornhole": "Play in teams of two. Opponents alternate four bag tosses per player. A bag on the board scores 1; a bag through the hole scores 3. Subtract the lower team's frame points from the higher team's; first to 21 after a frame wins.",
+  "basketball-free-throws": "Shoot from behind the free-throw line with no defender. Make as many free throws in a row as you can. Keep your feet behind the line until the ball reaches the rim or goes through. Your streak ends on the first miss.",
+  "lightning-knockout": "Line up at the free-throw or three-point line with two balls. The first two players shoot in order. After a miss, rebound and keep shooting; if the player behind scores first, you are out. Last player standing wins.",
+  "pound-the-nail": "Start with an identical nail already set in the stump. On the signal, hammer until the head is flush with the wood. Keep your free hand clear while striking; the clock stops at a flush finish.",
+  "grid-based-logic-puzzle": "Use the printed clues to match each item once in every category. Mark confirmed matches and cross out impossible ones until the grid is fully solved. Stop the clock only after the answer is checked as correct.",
+  "sudoku": "Fill every empty square with a digit from 1 to 9. Each row, column, and outlined 3-by-3 box must contain each digit once. Stop the clock only after the completed grid is checked as correct.",
+  "chess": "White moves first; players alternate legal moves. Protect your king while trying to checkmate the other king - an attack with no legal escape. Checkmate or resignation wins; a drawn game must be replayed for the bracket.",
+  "checkers": "Move diagonally on dark squares and jump to capture whenever a jump is available. Reach the far row to crown a king, which may move backward. Win when your opponent has no pieces or no legal move; replay a draw.",
+  "table-tennis": "Serve so the ball bounces on your side, then your opponent's. Rally over the net, letting it bounce once on your side before returning it. Games go to 11, win by 2; play best of three games.",
+  "carpet-ball": "Place five balls at each end of the carpeted table. Take turns rolling the cue ball to knock your opponent's balls into the tray. After one side clears the other, the opponent gets one mercy roll; if both clear, replay with one fewer ball per side. A ball off the table forfeits the game.",
+  "foosball": "Play in teams of two and move the rods to shoot into the opposing goal. A goal counts when the ball crosses the goal line. Do not spin the rods. First to five goals wins a game; play best of three."
+}

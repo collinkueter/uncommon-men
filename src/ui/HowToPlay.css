@@ -1,0 +1,54 @@
+.how-to-play {
+  margin: 1rem 0 1.25rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-translucent);
+  color: var(--color-text);
+}
+
+.how-to-play summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: .6rem .85rem;
+  color: var(--color-text);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.how-to-play summary::after {
+  content: "›";
+  margin-left: auto;
+  color: var(--color-muted);
+  font-size: 1.45rem;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.how-to-play[open] summary::after {
+  transform: rotate(90deg);
+}
+
+.how-to-play summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+.how-to-play-content {
+  padding: 0 .85rem .85rem;
+  color: var(--color-muted);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.bracket-page .how-to-play {
+  margin: 1rem 0 0;
+  max-width: 48rem;
+}
+
+.knockout-page .how-to-play {
+  margin: 1rem 0 1.5rem;
+}

@@ -1,4 +1,7 @@
 import type { Category, Competition } from "./types";
+import eventInstructions from "./eventInstructions.json";
+
+const canonicalInstructions = eventInstructions as Record<string, string>;
 
 export const initialCategories: Category[] = [
   { id: "brute-strength", name: "Brute Strength", group: "physical", order: 1 },
@@ -38,7 +41,7 @@ const event = (
   unit,
   team,
   teamSize,
-  instructions,
+  instructions: canonicalInstructions[id] ?? instructions,
   active: true,
 });
 

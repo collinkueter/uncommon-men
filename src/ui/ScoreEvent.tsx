@@ -18,6 +18,7 @@ import {
 import { Bracket } from "./Bracket";
 import { Knockout } from "./Knockout";
 import { AttemptList, getAttemptsForEventParticipant, participantIdForName } from "./AttemptList";
+import { HowToPlay } from "./HowToPlay";
 import "./EntryForms.css";
 
 export function ScoreEvent() {
@@ -253,9 +254,7 @@ function ScoreForm({ event }: { event: Competition }) {
         <div className="pills scoring-pills">
           <span>{scoreLabel(event)}</span>
         </div>
-        {event.instructions.trim() && (
-          <p className="event-instructions">{event.instructions}</p>
-        )}
+        <HowToPlay instructions={event.instructions} />
         <div className="entry-field competitor-field">
           <label htmlFor={competitorId}>Competing</label>
           <div className={`competitor ${listOpen ? "open" : ""}`}>
