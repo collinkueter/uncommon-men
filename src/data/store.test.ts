@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialEvents } from "@/domain/catalog";
 import { createSeedState, DEMO_RECORDED_AT } from "./seed";
-import { migrateLegacyDemoDates, validateTeamInput } from "./store";
+import { createConferenceStore, migrateLegacyDemoDates, validateTeamInput } from "./store";
 
 const legacyRecordedAt = 1_726_000_000_000;
 
@@ -96,5 +96,75 @@ describe("team save validation", () => {
     expect(() => validateTeamInput(createSeedState(), { type: "saveTeam", ...command })).toThrow(
       "Enter a valid team name and members.",
     );
+  });
+});
+
+describe("demo identity registration", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const setup = (identity?: { name: string; participantId?: string }) => {
+    const data = createSeedState();
+    const storage = new Map<string, string>([["uncommon-men.demo-state.v1", JSON.stringify(data)]]);
+    if (identity) storage.set("uncommon-men.demo-identity", JSON.stringify(identity));
+    vi.stubGlobal("window", { location: { search: "?demo=1" } });
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    return storage;
+  };
+
+  it.each([undefined, "demo-p1"] as const)("renames the linked record while retaining its results and teams (%s)", async (participantId) => {
+    setup({ name: "Caleb Johnson", participantId: "demo-p1" });
+    const store = await createConferenceStore();
+    const before = store.getSnapshot();
+    const participantCount = before.data.participants.length;
+    const attempts = before.data.attempts;
+    const teams = before.data.teams;
+
+    await store.execute({
+      type: "identity",
+      name: "Caleb J",
+      ...(participantId ? { participantId } : {}),
+    });
+
+    const after = store.getSnapshot();
+    expect(after.identity).toMatchObject({ name: "Caleb J", participantId: "demo-p1" });
+    expect(after.data.participants).toHaveLength(participantCount);
+    expect(after.data.participants.find((participant) => participant.id === "demo-p1"))
+      .toMatchObject({ name: "Caleb J", normalizedName: "caleb j" });
+    expect(after.data.attempts).toEqual(attempts);
+    expect(after.data.teams).toEqual(teams);
+    expect(after.data.audit[0]).toMatchObject({ action: "identity" });
+    expect(after.data.audit[1]).toMatchObject({ action: "renameParticipant", entityId: "demo-p1" });
+    store.dispose();
+  });
+
+  it("links an explicitly selected different participant without renaming it", async () => {
+    setup({ name: "Caleb Johnson", participantId: "demo-p1" });
+    const store = await createConferenceStore();
+    const selected = store.getSnapshot().data.participants.find((participant) => participant.id === "demo-p2")!;
+
+    await store.execute({ type: "identity", name: "Edited label", participantId: selected.id });
+
+    expect(store.getSnapshot().identity).toMatchObject({ name: selected.name, participantId: selected.id });
+    expect(store.getSnapshot().data.participants.find((participant) => participant.id === selected.id)).toEqual(selected);
+    store.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  it("creates and links a participant for first registration", async () => {
+    setup();
+    const store = await createConferenceStore();
+
+    await store.execute({ type: "identity", name: "First Registration" });
+
+    const identity = store.getSnapshot().identity!;
+    expect(identity.name).toBe("First Registration");
+    expect(store.getSnapshot().data.participants).toContainEqual({
+      id: identity.participantId,
+      name: "First Registration",
+      normalizedName: "first registration",
+    });
+    store.dispose();
   });
 });

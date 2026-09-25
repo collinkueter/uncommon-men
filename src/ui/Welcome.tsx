@@ -193,9 +193,13 @@ export function Welcome() {
   const save = async () => {
     const trimmed = name.trim();
     if (!trimmed || saving) return;
+    if (trimmed.length > 80) {
+      setError("Your name must be 80 characters or fewer.");
+      return;
+    }
     if (selected) return commit(selected.name, selected.id);
     const linked = snapshot.identity?.participantId;
-    if (linked && normalizeName(trimmed) === normalizeName(snapshot.identity!.name))
+    if (linked)
       return commit(trimmed, linked);
     const candidates = findSimilarParticipants(trimmed, snapshot.data.participants);
     if (candidates.length) {

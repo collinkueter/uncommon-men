@@ -24,7 +24,7 @@ Open `http://localhost:5173/?demo=1` for the explicit local demonstration. Demo 
 - Firestore snapshot listeners propagate saves and corrections without refreshing. Realtime subscriptions are required for presentation mode; one-shot database pipeline queries do not fulfill this requirement.
 - Every persistent mutation is paired with an append-only audit entry. Corrections preserve original values and require reasons.
 - Timed results are stored as seconds. The stopwatch is an input mechanism; a stopped timer is reviewed before an explicit save.
-- The profile icon/name opens the remembered-name editor and returns to the originating activity. Name changes use the existing audited identity flow; historical participant renames remain an administrator operation.
+- The profile icon/name opens the remembered-name editor and returns to the originating activity. Name changes use the existing audited identity flow; editing your own name renames the linked participant in place while preserving results and team memberships; administrators can rename other participants.
 - View attempts expands the current activity's history for the selected competitor beneath the entry form. It updates from the shared snapshot after saves, retains best-attempt markers, and does not navigate away. My Results remains available for history across activities.
 
 ## Scoring

@@ -156,6 +156,42 @@ describe("Firestore conference rules", () => {
     await assertSucceeds(participantBatch("recorder-1").commit());
   });
 
+  it.each([
+    ["existing link", "p1", "p1", "New Name", true],
+    ["unlinked participant", null, "p1", "New Name", false],
+    ["different participant", "p2", "p1", "New Name", false],
+    ["switching away", "p1", "p2", "New Name", false],
+    ["mismatched identity name", "p1", "p1", "Other Name", false],
+  ])("checks self rename authorization: %s", async (_label, priorId, nextId, identityName, allowed) => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "identities", "recorder-1"), {
+        uid: "recorder-1", name: "Recorder", participantId: priorId, auditId: "seed-identity",
+      });
+    });
+    const db = environment.authenticatedContext("recorder-1").firestore();
+    const participantRef = doc(db, "participants", "p1");
+    const identityRef = doc(db, "identities", "recorder-1");
+    const participantBefore = (await getDoc(participantRef)).data()!;
+    const identityBefore = (await getDoc(identityRef)).data()!;
+    const participantAfter = { name: "New Name", normalizedName: "new name", auditId: "rename-person" };
+    const identityAfter = { ...identityBefore, name: identityName, participantId: nextId, auditId: "rename-identity" };
+    const batch = writeBatch(db);
+    batch.set(participantRef, participantAfter);
+    batch.set(identityRef, identityAfter);
+    batch.set(doc(db, "audit", "rename-person"), {
+      action: "renameParticipant", entityType: "participants", entityId: "p1",
+      actorUid: "recorder-1", actorName: identityName, at: serverTimestamp(),
+      before: participantBefore, after: participantAfter, reason: "Updated own name",
+    });
+    batch.set(doc(db, "audit", "rename-identity"), {
+      action: "identity", entityType: "identities", entityId: "recorder-1",
+      actorUid: "recorder-1", actorName: identityName, at: serverTimestamp(),
+      before: identityBefore, after: identityAfter, reason: "Updated own name",
+    });
+    if (allowed) await assertSucceeds(batch.commit());
+    else await assertFails(batch.commit());
+  });
+
   it("rejects unauthenticated and unaudited writes", async () => {
     const publicDb = environment.unauthenticatedContext().firestore();
     await assertFails(

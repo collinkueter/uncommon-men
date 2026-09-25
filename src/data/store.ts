@@ -264,23 +264,49 @@ class DemoStore extends BaseStore {
       const data = clone(this.snapshot.data);
       const actor = this.snapshot.identity!;
       if (command.type === "identity") {
-        const identity = {
-          ...actor,
-          name: command.name.trim(),
-          participantId: command.participantId,
-        };
-        if (!identity.name) throw new Error("Enter your name.");
-        if (!identity.participantId) {
-          const normalizedName = normalizeName(identity.name);
-          let participant = data.participants.find(
+        const requestedName = command.name.trim();
+        if (!requestedName) throw new Error("Enter your name.");
+        if (requestedName.length > 80)
+          throw new Error("Your name must be 80 characters or fewer.");
+        const requestedParticipantId = command.participantId ?? actor.participantId;
+        let participant = requestedParticipantId
+          ? data.participants.find((item) => item.id === requestedParticipantId)
+          : undefined;
+        if (requestedParticipantId && !participant)
+          throw new Error("Participant not found.");
+        if (!participant) {
+          const normalizedName = normalizeName(requestedName);
+          participant = data.participants.find(
             (item) => item.normalizedName === normalizedName,
           );
           if (!participant) {
-            participant = { id: randomId(), name: identity.name, normalizedName };
+            participant = { id: randomId(), name: requestedName, normalizedName };
             data.participants.push(participant);
           }
-          identity.participantId = participant.id;
+        } else if (participant.id === actor.participantId) {
+          const beforeParticipant = clone(participant);
+          if (participant.name !== requestedName || participant.normalizedName !== normalizeName(requestedName)) {
+            participant.name = requestedName;
+            participant.normalizedName = normalizeName(requestedName);
+            data.audit.unshift({
+              id: randomId(),
+              action: "renameParticipant",
+              entityType: "participants",
+              entityId: participant.id,
+              actorUid: actor.uid,
+              actorName: requestedName,
+              at: now(),
+              before: beforeParticipant,
+              after: participant,
+              reason: "Identity name updated",
+            });
+          }
         }
+        const identity = {
+          ...actor,
+          name: participant.name,
+          participantId: participant.id,
+        };
         localStorage.setItem(
           DEMO_IDENTITY_KEY,
           JSON.stringify({
@@ -781,13 +807,13 @@ class FirebaseStore extends BaseStore {
       // joined the roster, gets its roster record now.
       if (identity.name && !identity.participantId) {
         try {
-          const participantId = await this.saveIdentityWithParticipant(
+          const saved = await this.saveIdentityWithParticipant(
             user.uid,
             identity.name,
             undefined,
           );
           if (revision !== this.authRevision) return;
-          identity = { ...identity, participantId };
+          identity = { ...identity, name: saved.name, participantId: saved.id };
           rememberIdentity(identity);
           this.snapshot = { ...this.snapshot, identity };
           this.emit();
@@ -908,37 +934,47 @@ class FirebaseStore extends BaseStore {
     uid: string,
     name: string,
     participantId: string | undefined,
-  ): Promise<string> {
+    explicitParticipantId = false,
+  ): Promise<{ id: string; name: string }> {
     const db = this.requireReady().db;
     const normalizedName = normalizeName(name);
-    const existingId =
-      participantId ??
-      this.snapshot.data.participants.find(
-        (item) => item.normalizedName === normalizedName,
-      )?.id;
-    const id = existingId ?? (await participantDocumentId(normalizedName));
+    if (!name.trim()) throw new Error("Enter your name.");
+    if (name.length > 80) throw new Error("Your name must be 80 characters or fewer.");
     const identityRef = doc(db, "identities", uid);
-    const participantRef = doc(db, "participants", id);
     const identityAuditRef = doc(db, "audit", randomId());
-    const participantAuditRef = doc(db, "audit", randomId());
+    let savedName = name;
+    let savedId = participantId;
     await retryOnRace(() =>
       runTransaction(db, async (transaction) => {
         const identitySnapshot = await transaction.get(identityRef);
-        const participantSnapshot = existingId
-          ? null
-          : await transaction.get(participantRef);
+        const persistedParticipantId = identitySnapshot.exists()
+          ? identitySnapshot.data().participantId || undefined
+          : undefined;
+        const targetId =
+          participantId ??
+          persistedParticipantId ??
+          this.snapshot.data.participants.find(
+            (item) => item.normalizedName === normalizedName,
+          )?.id ??
+          (await participantDocumentId(normalizedName));
+        const participantRef = doc(db, "participants", targetId);
+        const participantSnapshot = await transaction.get(participantRef);
         const at = serverTimestamp();
-        if (participantSnapshot && !participantSnapshot.exists()) {
+        const canRename = persistedParticipantId === targetId;
+        if (!participantSnapshot.exists()) {
+          if (explicitParticipantId || persistedParticipantId === targetId)
+            throw new Error("Participant not found.");
           const participantAfter = {
             name,
             normalizedName,
-            auditId: participantAuditRef.id,
+            auditId: randomId(),
           };
+          const participantAuditRef = doc(db, "audit", participantAfter.auditId);
           transaction.set(participantRef, participantAfter);
           transaction.set(participantAuditRef, {
             action: "addParticipant",
             entityType: "participants",
-            entityId: id,
+            entityId: targetId,
             actorUid: uid,
             actorName: name,
             at,
@@ -946,11 +982,37 @@ class FirebaseStore extends BaseStore {
             after: participantAfter,
             reason: "Joined the roster by entering a name",
           });
+          savedName = name;
+        } else if (canRename) {
+          const before = participantSnapshot.data();
+          if (before.name !== name || before.normalizedName !== normalizedName) {
+            const participantAfter = {
+              name,
+              normalizedName,
+              auditId: randomId(),
+            };
+            const participantAuditRef = doc(db, "audit", participantAfter.auditId);
+            transaction.set(participantRef, participantAfter);
+            transaction.set(participantAuditRef, {
+              action: "renameParticipant",
+              entityType: "participants",
+              entityId: targetId,
+              actorUid: uid,
+              actorName: name,
+              at,
+              before,
+              after: participantAfter,
+              reason: "Identity name updated",
+            });
+          }
+          savedName = name;
+        } else {
+          savedName = String(participantSnapshot.data().name);
         }
         const identityAfter = {
           uid,
-          name,
-          participantId: id,
+          name: savedName,
+          participantId: targetId,
           auditId: identityAuditRef.id,
         };
         transaction.set(identityRef, identityAfter);
@@ -959,15 +1021,16 @@ class FirebaseStore extends BaseStore {
           entityType: "identities",
           entityId: uid,
           actorUid: uid,
-          actorName: name,
+          actorName: savedName,
           at,
           before: identitySnapshot.exists() ? identitySnapshot.data() : null,
           after: identityAfter,
           reason: "Identity updated",
         });
+        savedId = targetId;
       }),
     );
-    return id;
+    return { id: savedId!, name: savedName };
   }
   async execute(command: Command) {
     if (this.snapshot.error && this.snapshot.error !== CATALOG_SETUP_ERROR) {
@@ -983,11 +1046,14 @@ class FirebaseStore extends BaseStore {
           participantId: command.participantId,
         };
         if (!identity.name) throw new Error("Enter your name.");
-        identity.participantId = await this.saveIdentityWithParticipant(
+        const saved = await this.saveIdentityWithParticipant(
           actor.uid,
           identity.name,
-          identity.participantId,
+          command.participantId ?? actor.participantId,
+          command.participantId !== undefined,
         );
+        identity.name = saved.name;
+        identity.participantId = saved.id;
         rememberIdentity(identity);
         this.snapshot = { ...this.snapshot, identity };
         this.emit();

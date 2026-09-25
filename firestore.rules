@@ -32,6 +32,14 @@ service cloud.firestore {
       return data.keys().hasOnly(['name', 'normalizedName', 'auditId'])
         && short(data.name, 80) && short(data.normalizedName, 80) && short(data.auditId, 100);
     }
+    function renamesLinkedParticipant(id) {
+      let identity = /databases/$(database)/documents/identities/$(request.auth.uid);
+      return signedIn()
+        && get(identity).data.participantId == id
+        && getAfter(identity).data.participantId == id
+        && getAfter(identity).data.name == request.resource.data.name
+        && getAfter(/databases/$(database)/documents/audit/$(request.resource.data.auditId)).data.action == 'renameParticipant';
+    }
     function validTeam(data) {
       return data.keys().hasOnly(['eventId', 'name', 'memberIds', 'auditId'])
         && short(data.eventId, 100) && short(data.name, 80) && data.memberIds is list
@@ -151,7 +159,8 @@ service cloud.firestore {
     match /participants/{id} {
       allow read: if true;
       allow create: if signedIn() && validParticipant(request.resource.data) && audited('participants', id);
-      allow update: if admin() && validParticipant(request.resource.data) && audited('participants', id);
+      allow update: if (admin() || renamesLinkedParticipant(id))
+        && validParticipant(request.resource.data) && audited('participants', id);
       allow delete: if false;
     }
     match /teams/{id} {
