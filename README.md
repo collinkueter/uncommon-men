@@ -23,6 +23,8 @@ Open `http://localhost:5173/?demo=1` for the explicit local demonstration. Demo 
 - Firestore Enterprise native database `conference`, region `us-central1`, with realtime updates enabled.
 - Firestore snapshot listeners propagate saves and corrections without refreshing. Realtime subscriptions are required for presentation mode; one-shot database pipeline queries do not fulfill this requirement.
 - Every persistent mutation is paired with an append-only audit entry. Corrections preserve original values and require reasons.
+- Before a bracket starts, anyone with a recorder name can sign up existing or newly added players. Team registration automatically joins that event's bracket. Signups are saved immediately and shown to everyone. An administrator starts play with all registered entrants; later additions require an administrator and remain locked after the first recorded result.
+- Lightning / Knockout uses one shared game: everyone signs up before play starts, an administrator starts the game, and the last player standing is recorded as the winner. The archived legacy bracket document remains preserved for audit history and is ignored by knockout rules.
 - Timed results are stored as seconds. The stopwatch is an input mechanism; a stopped timer is reviewed before an explicit save.
 - The profile icon/name opens the remembered-name editor and returns to the originating activity. Name changes use the existing audited identity flow; editing your own name renames the linked participant in place while preserving results and team memberships; administrators can rename other participants.
 - View attempts expands the current activity's history for the selected competitor beneath the entry form. It updates from the shared snapshot after saves, retains best-attempt markers, and does not navigate away. My Results remains available for history across activities.
@@ -30,6 +32,8 @@ Open `http://localhost:5173/?demo=1` for the explicit local demonstration. Demo 
 ## Scoring
 
 The best valid attempt counts. First through eighth place receive 10, 8, 6, 5, 4, 3, 2, 1 points. Ties share their rank and average the points for occupied positions. Category and overall standings sum every active individual event. Team championships are separate. Bracket points are awarded when the bracket is complete; players eliminated in the same round share placement.
+
+Knockout points are awarded only after the game is complete: the winner receives 10 points and value 1; every other registered participant receives 0 points and value 0. Registration and active games do not appear in standings.
 
 The built-in catalog contains the approved conference activities only. Administrators can adjust scoring and instructions in the app.
 

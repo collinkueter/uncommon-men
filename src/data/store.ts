@@ -31,7 +31,8 @@ import {
   type Firestore,
   type Unsubscribe,
 } from "firebase/firestore";
-import { addBracketEntrant, advanceBracket, createBracket, normalizeName } from "@/domain/ranking";
+import { addBracketEntrant, advanceBracket, appendRegistrationEntrant, createBracket, createRegistrationBracket, normalizeName } from "@/domain/ranking";
+import { appendGameEntrant, createRegistrationGame, selectGameWinner, startGame } from "@/domain/knockout";
 import { initialCategories, initialEvents } from "@/domain/catalog";
 import type {
   AppSnapshot,
@@ -42,6 +43,7 @@ import type {
   ConferenceState,
   ConferenceStore,
   Identity,
+  KnockoutGame,
   Participant,
 } from "@/domain/types";
 import { log } from "@/lib/logging/logger";
@@ -61,6 +63,7 @@ const collections = [
   "teams",
   "attempts",
   "brackets",
+  "games",
   "audit",
 ] as const;
 type CollectionName = (typeof collections)[number];
@@ -72,6 +75,7 @@ const emptyState = (): ConferenceState => ({
   teams: [],
   attempts: [],
   brackets: [],
+  games: [],
   audit: [],
 });
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -88,7 +92,8 @@ export function validateTeamInput(
   const name = command.name.trim();
   const memberIds = [...new Set(command.memberIds)];
   if (
-    !event?.team ||
+    !event?.active ||
+    !event.team ||
     !name ||
     name.length > 80 ||
     memberIds.length > 20 ||
@@ -99,6 +104,50 @@ export function validateTeamInput(
   )
     throw new Error("Enter a valid team name and members.");
   return { event, name, memberIds };
+}
+
+export function validateStartBracketInput(
+  data: ConferenceState,
+  command: Extract<Command, { type: "startBracket" }>,
+  admin: boolean,
+) {
+  const event = data.events.find((item) => item.id === command.eventId);
+  if (!event || !event.active || event.kind !== "bracket")
+    throw new Error("Bracket event not found or inactive.");
+  if (!admin) throw new Error("Administrator access is required.");
+  const existingBracket = data.brackets.find((item) => item.eventId === event.id);
+  if (existingBracket?.status === "registration") return event;
+  if (
+    command.entrantIds.length < 2 ||
+    new Set(command.entrantIds).size !== command.entrantIds.length
+  )
+    throw new Error("Bracket entrants must be distinct.");
+  if (command.entrantIds.length > 128)
+    throw new Error("A bracket can have at most 128 entrants.");
+  const pool = event.team
+    ? data.teams.filter((item) => item.eventId === event.id)
+    : data.participants;
+  if (command.entrantIds.some((id) => !pool.some((item) => item.id === id)))
+    throw new Error("Bracket entrants are invalid for this event.");
+  if (existingBracket)
+    throw new Error("This event already has a bracket.");
+  return event;
+}
+
+function validateBracketEntrant(
+  data: ConferenceState,
+  eventId: string,
+  entrantId: string,
+) {
+  const event = data.events.find((item) => item.id === eventId);
+  if (!event || !event.active || event.kind !== "bracket")
+    throw new Error("Bracket event not found or inactive.");
+  const pool = event.team
+    ? data.teams.filter((item) => item.eventId === eventId)
+    : data.participants;
+  if (!pool.some((item) => item.id === entrantId))
+    throw new Error("Bracket entrant is invalid for this event.");
+  return event;
 }
 
 export function migrateLegacyDemoDates(data: ConferenceState): ConferenceState {
@@ -114,6 +163,7 @@ export function migrateLegacyDemoDates(data: ConferenceState): ConferenceState {
     events: initialEvents.map((event) => ({ ...event })),
     teams: data.teams.filter((team) => eventIds.has(team.eventId)),
     brackets: data.brackets.filter((bracket) => eventIds.has(bracket.eventId)),
+    games: (data.games ?? []).filter((game) => eventIds.has(game.eventId)),
     attempts: data.attempts.filter((attempt) => eventIds.has(attempt.eventId)).map((attempt) => {
       if (!attempt.id.startsWith("demo-attempt-") || !isLegacyFixtureTime(attempt.createdAt))
         return attempt;
@@ -349,6 +399,8 @@ class DemoStore extends BaseStore {
           (item) => item.id === command.eventId && item.active,
         );
         if (!event) throw new Error("Event not found or inactive.");
+        if (event.kind === "bracket" || event.kind === "knockout")
+          throw new Error("This event records winners instead of numeric results.");
         if (event.kind === "count" && !Number.isInteger(command.value))
           throw new Error("Count results must be whole numbers.");
         let participant = command.participantId
@@ -452,8 +504,12 @@ class DemoStore extends BaseStore {
         const index = data.events.findIndex(
           (item) => item.id === command.event.id,
         );
-        const value = clone(command.event);
-        before = index < 0 ? null : clone(data.events[index]);
+        const value: Competition = clone(command.event);
+        const previous = index < 0 ? null : data.events[index];
+        before = previous ? clone(previous) : null;
+        const existingGame = data.games.find((game) => game.eventId === value.id);
+        if (existingGame && existingGame.status !== "registration" && previous && previous.kind !== value.kind)
+          throw new Error("Scoring type cannot change after a game starts.");
         if (index < 0) data.events.push(value);
         else data.events[index] = value;
         after = value;
@@ -474,6 +530,14 @@ class DemoStore extends BaseStore {
         entityType = "categories";
       } else if (command.type === "saveTeam") {
         const { name, memberIds } = validateTeamInput(data, command);
+        const bracketEvent = data.events.find(
+          (item) => item.id === command.eventId && item.kind === "bracket",
+        );
+        const existingBracket = bracketEvent
+          ? data.brackets.find((item) => item.eventId === command.eventId)
+          : undefined;
+        if (bracketEvent && existingBracket && existingBracket.status !== "registration" && !actor.admin && !command.teamId)
+          throw new Error("Administrator access is required to add teams after the bracket starts.");
         const normalizedName = normalizeName(name);
         const existing = command.teamId
           ? data.teams.findIndex((item) => item.id === command.teamId)
@@ -509,27 +573,107 @@ class DemoStore extends BaseStore {
         }
         entityId = (after as { id: string }).id;
         entityType = "teams";
+        if (bracketEvent && existing < 0 && (!existingBracket || existingBracket.status === "registration")) {
+          const registration = existingBracket ?? createRegistrationBracket(command.eventId);
+          const registered = appendRegistrationEntrant(registration, (after as { id: string }).id);
+          if (!existingBracket) data.brackets.push(registered);
+          else data.brackets[data.brackets.indexOf(existingBracket)] = registered;
+          data.audit.unshift({
+            id: randomId(), action: "joinBracket", entityType: "brackets",
+            entityId: registered.id, actorUid: actor.uid, actorName: actor.name,
+            at: now(), before: existingBracket ?? null, after: registered,
+            reason: "Team created and registered for bracket",
+          });
+        }
+      } else if (command.type === "joinBracket") {
+        validateBracketEntrant(data, command.eventId, command.entrantId);
+        let bracket = data.brackets.find((item) => item.eventId === command.eventId);
+        const hadBracket = Boolean(bracket);
+        if (!bracket) {
+          bracket = createRegistrationBracket(command.eventId);
+          data.brackets.push(bracket);
+        }
+        if (bracket.status !== "registration")
+          throw new Error("Bracket registration is closed.");
+        const beforeBracket = hadBracket ? clone(bracket) : null;
+        const registered = appendRegistrationEntrant(bracket, command.entrantId);
+        if (registered === bracket) return;
+        data.brackets[data.brackets.indexOf(bracket)] = registered;
+        before = beforeBracket;
+        after = registered;
+        entityId = registered.id;
+        entityType = "brackets";
       } else if (command.type === "startBracket") {
-        after = createBracket(command.eventId, command.entrantIds);
-        data.brackets.push(after as Bracket);
+        validateStartBracketInput(data, command, actor.admin);
+        const registration = data.brackets.find((item) => item.eventId === command.eventId);
+        const entrantIds = registration?.status === "registration"
+          ? registration.entrants
+          : command.entrantIds;
+        if (registration?.status === "registration" && entrantIds.length < 2)
+          throw new Error("A bracket requires two or more registered entrants.");
+        after = createBracket(command.eventId, entrantIds);
+        if (registration) {
+          before = clone(registration);
+          (after as Bracket).revision = registration.revision + 1;
+          data.brackets[data.brackets.indexOf(registration)] = after as Bracket;
+        } else data.brackets.push(after as Bracket);
         entityId = (after as Bracket).id;
         entityType = "brackets";
-      } else if (command.type === "addBracketTeam") {
+      } else if (command.type === "joinGame") {
+        const event = data.events.find((item) => item.id === command.eventId);
+        if (!event?.active || event.kind !== "knockout" || event.team) throw new Error("Knockout event not found or inactive.");
+        if (!data.participants.some((participant) => participant.id === command.participantId)) throw new Error("Participant is invalid for this event.");
+        let game = data.games.find((item) => item.eventId === command.eventId);
+        const hadGame = Boolean(game);
+        if (!game) { game = createRegistrationGame(command.eventId); data.games.push(game); }
+        if (game.status !== "registration") throw new Error("Game registration is closed.");
+        const beforeGame = hadGame ? clone(game) : null;
+        const registered = appendGameEntrant(game, command.participantId);
+        if (registered === game) return;
+        data.games[data.games.indexOf(game)] = registered;
+        before = beforeGame; after = registered; entityId = registered.id; entityType = "games";
+      } else if (command.type === "startGame") {
+        if (!actor.admin) throw new Error("Administrator access is required.");
+        const event = data.events.find((item) => item.id === command.eventId);
+        if (!event?.active || event.kind !== "knockout" || event.team) throw new Error("Knockout event not found or inactive.");
+        const index = data.games.findIndex((item) => item.eventId === command.eventId);
+        if (index < 0) throw new Error("A game requires two or more registered entrants.");
+        before = clone(data.games[index]);
+        const startedGame = startGame(data.games[index]);
+        after = startedGame; data.games[index] = startedGame;
+        entityId = data.games[index].id; entityType = "games";
+      } else if (command.type === "gameWinner") {
+        const event = data.events.find((item) => item.id === command.eventId);
+        if (!event?.active || event.kind !== "knockout" || event.team)
+          throw new Error("Knockout event not found or inactive.");
+        const index = data.games.findIndex((item) => item.eventId === command.eventId);
+        if (index < 0) throw new Error("Game not found.");
+        before = clone(data.games[index]);
+        const completedGame = selectGameWinner(data.games[index], command.winnerId, command.revision, actor.admin, command.reason);
+        after = completedGame;
+        data.games[index] = completedGame; entityId = data.games[index].id; entityType = "games"; reason = command.reason || "Winner selected";
+      } else if (command.type === "addBracketTeam" || command.type === "addBracketParticipant") {
         if (!actor.admin) throw new Error("Administrator access is required.");
         const index = data.brackets.findIndex((item) => item.id === command.bracketId);
         const bracket = data.brackets[index];
         if (!bracket || bracket.revision !== command.revision)
           throw new Error("This bracket changed. Refresh and try again.");
         const event = data.events.find((item) => item.id === bracket.eventId);
-        const team = data.teams.find((item) => item.id === command.teamId);
-        if (!event?.team || event.kind !== "bracket" || team?.eventId !== event.id)
+        const entrantId = command.type === "addBracketTeam" ? command.teamId : command.participantId;
+        const team = command.type === "addBracketTeam" && data.teams.find((item) => item.id === entrantId);
+        const participant = command.type === "addBracketParticipant" && data.participants.find((item) => item.id === entrantId);
+        if (event?.kind !== "bracket" || (command.type === "addBracketTeam"
+          ? (!event.team || !team || team.eventId !== event.id)
+          : (event.team || !participant)))
           throw new Error("Choose a registered team for this event.");
         before = clone(bracket);
-        after = addBracketEntrant(bracket, command.teamId);
+        after = addBracketEntrant(bracket, entrantId);
         data.brackets[index] = after as Bracket;
         entityId = bracket.id;
         entityType = "brackets";
-        reason = "Team added before any match results; matchups regenerated";
+        reason = command.type === "addBracketTeam"
+          ? "Team added before any match results; matchups regenerated"
+          : "Participant added before any match results; matchups regenerated";
       } else if (command.type === "matchWinner") {
         const index = data.brackets.findIndex(
           (item) => item.id === command.bracketId,
@@ -1073,6 +1217,8 @@ class FirebaseStore extends BaseStore {
           (item) => item.id === command.eventId && item.active,
         );
         if (!event) throw new Error("Event not found or inactive.");
+        if (event.kind === "bracket" || event.kind === "knockout")
+          throw new Error("This event records winners instead of numeric results.");
         if (event.kind === "count" && !Number.isInteger(command.value))
           throw new Error("Count results must be whole numbers.");
         const { db, actor } = this.requireReady();
@@ -1281,6 +1427,12 @@ class FirebaseStore extends BaseStore {
               throw new Error(
                 "Scoring type, direction, and team mode cannot change after results exist.",
               );
+            if (
+              before &&
+              this.snapshot.data.games.some((game) => game.eventId === id && game.status !== "registration") &&
+              before.kind !== event.kind
+            )
+              throw new Error("Scoring type cannot change after a game starts.");
             return event;
           },
         );
@@ -1320,18 +1472,21 @@ class FirebaseStore extends BaseStore {
         const { db, actor } = this.requireReady();
         const teamRef = doc(db, "teams", id);
         const eventRef = doc(db, "events", command.eventId);
+        const bracketRef = doc(db, "brackets", `${command.eventId}-bracket`);
         const participantRefs = memberIds.map((memberId) =>
           doc(db, "participants", memberId),
         );
         const auditRef = doc(db, "audit", randomId());
+        const bracketAuditRef = doc(db, "audit", randomId());
         await runTransaction(db, async (transaction) => {
           const eventSnapshot = await transaction.get(eventRef);
           const teamSnapshot = await transaction.get(teamRef);
+          const bracketSnapshot = await transaction.get(bracketRef);
           const participantSnapshots = [];
           for (const participantRef of participantRefs)
             participantSnapshots.push(await transaction.get(participantRef));
           const eventData = eventSnapshot.exists() ? eventSnapshot.data() : null;
-          if (!eventData?.team || eventData.teamSize === undefined)
+          if (!eventData?.active || !eventData.team || eventData.teamSize === undefined)
             throw new Error("Enter a valid team name and members.");
           if (Number(eventData.teamSize) > 0 && memberIds.length !== Number(eventData.teamSize))
             throw new Error("Enter a valid team name and members.");
@@ -1345,6 +1500,9 @@ class FirebaseStore extends BaseStore {
               throw new Error("Team not found for this event.");
             if (!actor.admin) throw new Error("Administrator access is required.");
           }
+          const bracketData = bracketSnapshot.exists() ? bracketSnapshot.data() : null;
+          if (eventData?.kind === "bracket" && bracketData && bracketData.status !== "registration" && !actor.admin && !teamSnapshot.exists())
+            throw new Error("Administrator access is required to add teams after the bracket starts.");
           const before = teamSnapshot.exists() ? teamSnapshot.data() : null;
           const after = {
             eventId: command.eventId,
@@ -1364,38 +1522,162 @@ class FirebaseStore extends BaseStore {
             after,
             reason: "Team saved",
           });
+          if (eventData.kind === "bracket" && !teamSnapshot.exists() && (!bracketData || bracketData.status === "registration")) {
+            const registration = bracketData
+              ? (fromFirestore(bracketRef.id, bracketData) as unknown as Bracket)
+              : createRegistrationBracket(command.eventId);
+            const registered = appendRegistrationEntrant(registration, id);
+            const { id: _, ...storedBracket } = registered;
+            transaction.set(bracketRef, { ...storedBracket, auditId: bracketAuditRef.id });
+            transaction.set(bracketAuditRef, {
+              action: "joinBracket", entityType: "brackets", entityId: bracketRef.id,
+              actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(),
+              before: bracketData, after: { ...storedBracket, auditId: bracketAuditRef.id },
+              reason: "Team created and registered for bracket",
+            });
+          }
         });
         return;
       }
-      if (command.type === "startBracket") {
-        this.requireAdmin();
-        const event = this.snapshot.data.events.find(
-          (item) => item.id === command.eventId && item.kind === "bracket",
-        );
-        const pool = event?.team
-          ? this.snapshot.data.teams.filter(
-              (item) => item.eventId === command.eventId,
-            )
-          : this.snapshot.data.participants;
-        if (
-          !event ||
-          command.entrantIds.some((id) => !pool.some((item) => item.id === id))
-        )
-          throw new Error("Bracket entrants are invalid for this event.");
-        const bracket = createBracket(command.eventId, command.entrantIds);
-        const { id, ...stored } = bracket;
-        await this.auditedWrite(
-          `brackets/${id}`,
-          "startBracket",
-          "Bracket started",
-          (before) => {
-            if (before) throw new Error("This event already has a bracket.");
-            return stored;
-          },
-        );
+      if (command.type === "joinBracket") {
+        const { db, actor } = this.requireReady();
+        const eventRef = doc(db, "events", command.eventId);
+        const entrantRef = doc(db, "participants", command.entrantId);
+        const teamRef = doc(db, "teams", command.entrantId);
+        const bracketRef = doc(db, "brackets", `${command.eventId}-bracket`);
+        const auditRef = doc(db, "audit", randomId());
+        await retryOnRace(() => runTransaction(db, async (transaction) => {
+          const eventSnapshot = await transaction.get(eventRef);
+          const bracketSnapshot = await transaction.get(bracketRef);
+          const event = eventSnapshot.exists() ? eventSnapshot.data() : null;
+          if (!event?.active || event.kind !== "bracket")
+            throw new Error("Bracket event not found or inactive.");
+          const entrantSnapshot = await transaction.get(event.team ? teamRef : entrantRef);
+          if (!entrantSnapshot.exists() || (event.team === true && entrantSnapshot.data().eventId !== command.eventId))
+            throw new Error("Bracket entrant is invalid for this event.");
+          const bracket = bracketSnapshot.exists()
+            ? (fromFirestore(bracketRef.id, bracketSnapshot.data()) as unknown as Bracket)
+            : createRegistrationBracket(command.eventId);
+          if (bracket.status !== "registration") throw new Error("Bracket registration is closed.");
+          const registered = appendRegistrationEntrant(bracket, command.entrantId);
+          if (registered === bracket) return;
+          const { id: _, ...stored } = registered;
+          const after = { ...stored, auditId: auditRef.id };
+          transaction.set(bracketRef, after);
+          transaction.set(auditRef, {
+            action: "joinBracket", entityType: "brackets", entityId: bracketRef.id,
+            actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(),
+            before: bracketSnapshot.exists() ? bracketSnapshot.data() : null,
+            after, reason: "Entrant joined bracket registration",
+          });
+        }));
         return;
       }
-      if (command.type === "addBracketTeam") {
+      if (command.type === "startBracket") {
+        const { db, actor } = this.requireAdmin();
+        const eventRef = doc(db, "events", command.eventId);
+        const bracketRef = doc(db, "brackets", `${command.eventId}-bracket`);
+        const auditRef = doc(db, "audit", randomId());
+        await runTransaction(db, async (transaction) => {
+          const eventSnapshot = await transaction.get(eventRef);
+          const bracketSnapshot = await transaction.get(bracketRef);
+          const event = eventSnapshot.exists() ? eventSnapshot.data() : null;
+          if (!event?.active || event.kind !== "bracket") throw new Error("Bracket event not found or inactive.");
+          const registration = bracketSnapshot.exists()
+            ? (fromFirestore(bracketRef.id, bracketSnapshot.data()) as unknown as Bracket)
+            : undefined;
+          const entrantIds = registration?.status === "registration" ? registration.entrants : command.entrantIds;
+          if (registration?.status === "registration" && entrantIds.length < 2)
+            throw new Error("A bracket requires two or more registered entrants.");
+          if (entrantIds.length > 128)
+            throw new Error("A bracket can have at most 128 entrants.");
+          if (registration && registration.status !== "registration") throw new Error("This event already has a bracket.");
+          const pool = event.team ? "teams" : "participants";
+          for (const entrantId of entrantIds) {
+            const entrant = await transaction.get(doc(db, pool, entrantId));
+            if (!entrant.exists() || (event.team && entrant.data().eventId !== command.eventId))
+              throw new Error("Bracket entrants are invalid for this event.");
+          }
+          const bracket = createBracket(command.eventId, entrantIds);
+          if (registration) bracket.revision = registration.revision + 1;
+          const { id: _, ...stored } = bracket;
+          const after = { ...stored, auditId: auditRef.id };
+          transaction.set(bracketRef, after);
+          transaction.set(auditRef, {
+            action: "startBracket", entityType: "brackets", entityId: bracketRef.id,
+            actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(),
+            before: bracketSnapshot.exists() ? bracketSnapshot.data() : null,
+            after, reason: "Bracket started",
+          });
+        });
+        return;
+      }
+      if (command.type === "joinGame") {
+        const { db, actor } = this.requireReady();
+        const eventRef = doc(db, "events", command.eventId);
+        const participantRef = doc(db, "participants", command.participantId);
+        const gameRef = doc(db, "games", `${command.eventId}-game`);
+        const auditRef = doc(db, "audit", randomId());
+        await retryOnRace(() => runTransaction(db, async (transaction) => {
+          const eventSnapshot = await transaction.get(eventRef);
+          const participantSnapshot = await transaction.get(participantRef);
+          const gameSnapshot = await transaction.get(gameRef);
+          const event = eventSnapshot.exists() ? eventSnapshot.data() : null;
+          if (!event?.active || event.kind !== "knockout" || event.team) throw new Error("Knockout event not found or inactive.");
+          if (!participantSnapshot.exists()) throw new Error("Participant is invalid for this event.");
+          const game = gameSnapshot.exists() ? fromFirestore(gameRef.id, gameSnapshot.data()) as unknown as KnockoutGame : createRegistrationGame(command.eventId);
+          if (game.status !== "registration") throw new Error("Game registration is closed.");
+          const registered = appendGameEntrant(game, command.participantId);
+          if (registered === game) return;
+          const { id: _, ...stored } = registered;
+          const after = { ...stored, auditId: auditRef.id };
+          transaction.set(gameRef, after);
+          transaction.set(auditRef, { action: "joinGame", entityType: "games", entityId: gameRef.id, actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(), before: gameSnapshot.exists() ? gameSnapshot.data() : null, after, reason: "Entrant joined knockout registration" });
+        }));
+        return;
+      }
+      if (command.type === "startGame") {
+        const { db, actor } = this.requireAdmin();
+        const eventRef = doc(db, "events", command.eventId);
+        const gameRef = doc(db, "games", `${command.eventId}-game`);
+        const auditRef = doc(db, "audit", randomId());
+        await runTransaction(db, async (transaction) => {
+          const eventSnapshot = await transaction.get(eventRef);
+          const gameSnapshot = await transaction.get(gameRef);
+          const event = eventSnapshot.exists() ? eventSnapshot.data() : null;
+          if (!event?.active || event.kind !== "knockout" || event.team) throw new Error("Knockout event not found or inactive.");
+          if (!gameSnapshot.exists()) throw new Error("A game requires two or more registered entrants.");
+          const game = fromFirestore(gameRef.id, gameSnapshot.data()) as unknown as KnockoutGame;
+          const started = startGame(game);
+          const { id: _, ...stored } = started;
+          const after = { ...stored, auditId: auditRef.id };
+          transaction.set(gameRef, after);
+          transaction.set(auditRef, { action: "startGame", entityType: "games", entityId: gameRef.id, actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(), before: gameSnapshot.data(), after, reason: "Knockout game started" });
+        });
+        return;
+      }
+      if (command.type === "gameWinner") {
+        const { db, actor } = this.requireReady();
+        const eventRef = doc(db, "events", command.eventId);
+        const gameRef = doc(db, "games", `${command.eventId}-game`);
+        const auditRef = doc(db, "audit", randomId());
+        await retryOnRace(() => runTransaction(db, async (transaction) => {
+          const eventSnapshot = await transaction.get(eventRef);
+          const gameSnapshot = await transaction.get(gameRef);
+          const event = eventSnapshot.exists() ? eventSnapshot.data() : null;
+          if (!event?.active || event.kind !== "knockout" || event.team)
+            throw new Error("Knockout event not found or inactive.");
+          if (!gameSnapshot.exists()) throw new Error("Game not found.");
+          const game = fromFirestore(gameRef.id, gameSnapshot.data()) as unknown as KnockoutGame;
+          const updated = selectGameWinner(game, command.winnerId, command.revision, actor.admin, command.reason);
+          const { id: _, ...stored } = updated;
+          const after = { ...stored, auditId: auditRef.id };
+          transaction.set(gameRef, after);
+          transaction.set(auditRef, { action: "gameWinner", entityType: "games", entityId: gameRef.id, actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(), before: gameSnapshot.data(), after, reason: command.reason || "Winner selected" });
+        }));
+        return;
+      }
+      if (command.type === "addBracketTeam" || command.type === "addBracketParticipant") {
         const { db, actor } = this.requireAdmin();
         const target = doc(db, "brackets", command.bracketId);
         const auditRef = doc(db, "audit", randomId());
@@ -1406,15 +1688,22 @@ class FirebaseStore extends BaseStore {
             throw new Error("This bracket changed. Refresh and try again.");
           const bracket = fromFirestore(command.bracketId, before) as unknown as Bracket;
           const event = await transaction.get(doc(db, "events", bracket.eventId));
-          const team = await transaction.get(doc(db, "teams", command.teamId));
-          if (!event.exists() || !event.data().team || event.data().kind !== "bracket"
-            || !team.exists() || team.data().eventId !== bracket.eventId)
-            throw new Error("Choose a registered team for this event.");
-          const { id: _, ...stored } = addBracketEntrant(bracket, command.teamId);
+          const entrantId = command.type === "addBracketTeam" ? command.teamId : command.participantId;
+          const entrant = await transaction.get(doc(
+            db,
+            command.type === "addBracketTeam" ? "teams" : "participants",
+            entrantId,
+          ));
+          if (!event.exists() || event.data().kind !== "bracket"
+            || (command.type === "addBracketTeam"
+              ? (!event.data().team || !entrant.exists() || entrant.data().eventId !== bracket.eventId)
+              : (event.data().team || !entrant.exists())))
+            throw new Error("Choose a registered entrant for this event.");
+          const { id: _, ...stored } = addBracketEntrant(bracket, entrantId);
           const after = { ...stored, auditId: auditRef.id };
           transaction.set(target, after);
           transaction.set(auditRef, {
-            action: "addBracketTeam", entityType: "brackets", entityId: target.id,
+            action: command.type, entityType: "brackets", entityId: target.id,
             actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(),
             before, after, reason: "Team added before any match results; matchups regenerated",
           });

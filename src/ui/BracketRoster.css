@@ -78,6 +78,7 @@
 /* Keep bracket styles scoped above the legacy page selectors. */
 .bracket-page.bracket-page { display: block; min-height: calc(100dvh - 92px); padding: clamp(1rem, 3vw, 3rem); }
 .bracket-page > .bracket-play { padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 2rem; align-items: start; }
+.bracket-page > .bracket-play.registration { grid-template-columns: minmax(0, 1fr); }
 .bracket-page .bracket-header { margin-bottom: 1.75rem; }
 .bracket-page .bracket-header h1 { margin: .75rem 0 1rem; overflow-wrap: anywhere; }
 .bracket-page .event-instructions { color: var(--color-muted); margin: .5rem 0; }

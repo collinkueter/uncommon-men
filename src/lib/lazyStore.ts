@@ -12,7 +12,7 @@ export class LazyConferenceStore implements ConferenceStore {
 
   constructor(load: () => Promise<ConferenceStore>, demo: boolean) {
     this.pending = {
-      data: { categories: [], events: [], participants: [], teams: [], attempts: [], brackets: [], audit: [] },
+      data: { categories: [], events: [], participants: [], teams: [], attempts: [], brackets: [], games: [], audit: [] },
       identity: null,
       loading: true,
       error: null,

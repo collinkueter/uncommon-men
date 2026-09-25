@@ -16,6 +16,7 @@ import {
   scoreLabel,
 } from "./shared";
 import { Bracket } from "./Bracket";
+import { Knockout } from "./Knockout";
 import { AttemptList, getAttemptsForEventParticipant, participantIdForName } from "./AttemptList";
 import "./EntryForms.css";
 
@@ -39,6 +40,12 @@ export function ScoreEvent() {
     return (
       <RequireIdentity>
         <Bracket key={event.id} event={event} />
+      </RequireIdentity>
+    );
+  if (event.kind === "knockout")
+    return (
+      <RequireIdentity>
+        <Knockout key={event.id} event={event} />
       </RequireIdentity>
     );
   return (

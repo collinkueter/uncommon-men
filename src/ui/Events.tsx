@@ -18,6 +18,7 @@ const groups: Array<{ title: string; match: (event: Competition) => boolean; Ico
   { title: "Timed", match: (event) => event.kind === "duration", Icon: Clock3 },
   { title: "Reps and distance", match: (event) => event.kind === "count" || event.kind === "distance", Icon: Flame },
   { title: "Brackets", match: (event) => event.kind === "bracket", Icon: Trophy },
+  { title: "Group games", match: (event) => event.kind === "knockout", Icon: Trophy },
 ];
 
 export function Events() {
@@ -33,7 +34,7 @@ export function Events() {
     (event) => event.active && event.name.toLowerCase().includes(search.toLowerCase()),
   );
   const best = (event: Competition) => {
-    if (!participantId || event.kind === "bracket") return undefined;
+    if (!participantId || event.kind === "bracket" || event.kind === "knockout") return undefined;
     const attempt = getBestAttempt(snapshot.data, event.id, participantId);
     if (!attempt) return undefined;
     return `${formatScore(attempt.value, event)}${event.kind === "duration" ? "" : ` ${event.unit}`}`;

@@ -22,7 +22,8 @@ service cloud.firestore {
     function validEvent(data) {
       return data.keys().hasOnly(['categoryId', 'name', 'kind', 'direction', 'unit', 'team', 'teamSize', 'instructions', 'active', 'auditId'])
         && short(data.categoryId, 100) && short(data.name, 100)
-        && data.kind in ['count', 'duration', 'distance', 'bracket']
+        && data.kind in ['count', 'duration', 'distance', 'bracket', 'knockout']
+        && (data.kind != 'knockout' || data.team == false)
         && data.direction in ['higher', 'lower'] && data.unit is string && data.unit.size() <= 30
         && data.team is bool && data.teamSize is int && data.teamSize >= 0 && data.teamSize <= 20
         && data.instructions is string && data.instructions.size() <= 4000
@@ -65,14 +66,49 @@ service cloud.firestore {
     }
     function validBracket(data) {
       return data.keys().hasOnly(['eventId', 'entrants', 'matches', 'status', 'revision', 'auditId', 'lastMatchIndex', 'lastParentIndex', 'entrantsOpen'])
-        && short(data.eventId, 100) && data.entrants is list && data.entrants.size() >= 2 && data.entrants.size() <= 128
-        && data.matches is list && data.matches.size() >= 1 && data.matches.size() <= 255
-        && data.status in ['active', 'complete'] && data.revision is int && data.revision >= 1 && data.revision <= 10000
+        && short(data.eventId, 100) && data.entrants is list && data.entrants.size() <= 128
+        && data.matches is list && data.matches.size() <= 255
+        && ((data.status == 'registration' && data.entrants.size() >= 1 && data.matches.size() == 0)
+            || (data.status in ['active', 'complete'] && data.entrants.size() >= 2 && data.matches.size() >= 1))
+        && data.revision is int && data.revision >= 1 && data.revision <= 10000
         && data.get('entrantsOpen', false) is bool && short(data.auditId, 100);
+    }
+    // Signup appends one verified entrant. No matches or results exist until
+    // an administrator explicitly starts the bracket.
+    function validRegistration(data, id) {
+      let event = get(/databases/$(database)/documents/events/$(data.eventId)).data;
+      let entrant = data.entrants[data.entrants.size() - 1];
+      return id == data.eventId + '-bracket'
+        && event.active == true && event.kind == 'bracket'
+        && data.status == 'registration' && data.matches == [] && data.entrantsOpen == true
+        && !data.keys().hasAny(['lastMatchIndex', 'lastParentIndex'])
+        && data.entrants.toSet().size() == data.entrants.size() && short(entrant, 100)
+        && ((event.team == false && existsAfter(/databases/$(database)/documents/participants/$(entrant)))
+            || (event.team == true && getAfter(/databases/$(database)/documents/teams/$(entrant)).data.eventId == data.eventId))
+        && getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data.action == 'joinBracket';
+    }
+    function validRegistrationAppend(data, id) {
+      let entrant = data.entrants[data.entrants.size() - 1];
+      return resource.data.status == 'registration' && validRegistration(data, id)
+        && data.entrants.size() == resource.data.entrants.size() + 1
+        && data.entrants.removeAll([entrant]) == resource.data.entrants;
+    }
+    function validRegistrationStart(data) {
+      return admin() && resource.data.status == 'registration' && data.status == 'active'
+        && data.entrants == resource.data.entrants && data.entrantsOpen == true
+        && getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data.action == 'startBracket';
+    }
+    function teamJoinsRegistration(data, id) {
+      let event = getAfter(/databases/$(database)/documents/events/$(data.eventId)).data;
+      let bracket = /databases/$(database)/documents/brackets/$(data.eventId + '-bracket');
+      return event.kind != 'bracket'
+        || (existsAfter(bracket) && getAfter(bracket).data.status == 'registration'
+            && id in getAfter(bracket).data.entrants)
+        || (admin() && exists(bracket) && get(bracket).data.status != 'registration');
     }
     // entrantsOpen is initialized by bracket creation/reseeding and closes on
     // every result write. Legacy revision-1 brackets have not recorded results.
-    function validTeamAddition(data) {
+    function validEntrantAddition(data) {
       let teamId = data.entrants[data.entrants.size() - 1];
       let event = get(/databases/$(database)/documents/events/$(data.eventId)).data;
       return admin() && resource.data.status == 'active' && data.status == 'active'
@@ -81,9 +117,13 @@ service cloud.firestore {
         && data.entrants.size() == resource.data.entrants.size() + 1
         && data.entrants.toSet().size() == data.entrants.size()
         && data.entrants.removeAll([teamId]) == resource.data.entrants
-        && short(teamId, 100) && event.team == true && event.kind == 'bracket'
-        && get(/databases/$(database)/documents/teams/$(teamId)).data.eventId == data.eventId
-        && getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data.action == 'addBracketTeam';
+        && short(teamId, 100) && event.kind == 'bracket'
+        && ((event.team == true
+              && get(/databases/$(database)/documents/teams/$(teamId)).data.eventId == data.eventId
+              && getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data.action == 'addBracketTeam')
+            || (event.team == false
+              && exists(/databases/$(database)/documents/participants/$(teamId))
+              && getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data.action == 'addBracketParticipant'));
     }
     function changedOnlyWinner(oldMatch, newMatch) {
       return oldMatch.winnerId == null && oldMatch.bye == false
@@ -129,7 +169,7 @@ service cloud.firestore {
     }
     function validAudit(data) {
       return data.keys().hasOnly(['action', 'entityType', 'entityId', 'actorUid', 'actorName', 'at', 'before', 'after', 'reason'])
-        && short(data.action, 80) && data.entityType in ['categories', 'events', 'participants', 'teams', 'attempts', 'brackets', 'identities']
+        && short(data.action, 80) && data.entityType in ['categories', 'events', 'participants', 'teams', 'attempts', 'brackets', 'games', 'identities']
         && short(data.entityId, 128) && data.actorUid == request.auth.uid && short(data.actorName, 80)
         && data.at is timestamp && data.at == request.time && data.reason is string && data.reason.size() <= 500
         && getAfter(/databases/$(database)/documents/identities/$(request.auth.uid)).data.name == data.actorName;
@@ -144,6 +184,38 @@ service cloud.firestore {
       return getAfter(target).data.auditId == auditId
         && data.after == getAfter(target).data
         && ((!exists(target) && data.before == null) || (exists(target) && data.before == get(target).data));
+    }
+    function validGame(data, id) {
+      let event = get(/databases/$(database)/documents/events/$(data.eventId)).data;
+      return data.keys().hasOnly(['eventId', 'entrants', 'status', 'winnerId', 'revision', 'auditId'])
+        && short(data.eventId, 100) && id == data.eventId + '-game'
+        && event.kind == 'knockout' && event.team == false && event.active == true
+        && data.entrants is list && data.entrants.size() >= 1 && data.entrants.size() <= 128
+        && data.entrants.toSet().size() == data.entrants.size()
+        && data.status in ['registration', 'active', 'complete']
+        && (data.status == 'registration' || data.entrants.size() >= 2)
+        && ((data.status == 'complete' && short(data.winnerId, 100) && data.winnerId in data.entrants)
+            || (data.status != 'complete' && data.winnerId == null))
+        && data.revision is int && data.revision >= 1 && data.revision <= 10000 && short(data.auditId, 100);
+    }
+    function validGameSignup(data) {
+      let entrant = data.entrants[data.entrants.size() - 1];
+      return data.status == 'registration' && short(entrant, 100)
+        && existsAfter(/databases/$(database)/documents/participants/$(entrant))
+        && getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data.action == 'joinGame';
+    }
+    function validGameAppend(data) {
+      let entrant = data.entrants[data.entrants.size() - 1];
+      return resource.data.status == 'registration' && validGameSignup(data)
+        && data.entrants.size() == resource.data.entrants.size() + 1
+        && data.entrants.removeAll([entrant]) == resource.data.entrants;
+    }
+    function validGameResult(data) {
+      let audit = getAfter(/databases/$(database)/documents/audit/$(data.auditId)).data;
+      return data.status == 'complete' && audit.action == 'gameWinner'
+        && ((resource.data.status == 'active' && resource.data.winnerId == null)
+            || (resource.data.status == 'complete' && admin() && short(audit.reason, 500)))
+        && data.winnerId != resource.data.winnerId;
     }
 
     match /categories/{id} {
@@ -165,7 +237,8 @@ service cloud.firestore {
     }
     match /teams/{id} {
       allow read: if true;
-      allow create: if signedIn() && validTeam(request.resource.data) && validTeamMembers(request.resource.data) && audited('teams', id);
+      allow create: if signedIn() && validTeam(request.resource.data) && validTeamMembers(request.resource.data)
+        && teamJoinsRegistration(request.resource.data, id) && audited('teams', id);
       allow update: if admin() && validTeam(request.resource.data) && validTeamMembers(request.resource.data) && audited('teams', id);
       allow delete: if false;
     }
@@ -175,7 +248,7 @@ service cloud.firestore {
         && request.resource.data.recordedBy == request.auth.uid
         && getAfter(/databases/$(database)/documents/identities/$(request.auth.uid)).data.name == request.resource.data.recorderName
         && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.active == true
-        && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.kind != 'bracket'
+        && !(getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.kind in ['bracket', 'knockout'])
         && ((getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.team == false
               && existsAfter(/databases/$(database)/documents/participants/$(request.resource.data.participantId)))
             || (getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.team == true
@@ -198,15 +271,41 @@ service cloud.firestore {
     }
     match /brackets/{id} {
       allow read: if true;
-      allow create: if admin() && validBracket(request.resource.data) && audited('brackets', id);
+      allow create: if signedIn() && validBracket(request.resource.data)
+        && get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.kind == 'bracket'
+        && ((validRegistration(request.resource.data, id)
+              && request.resource.data.entrants.size() == 1 && request.resource.data.revision == 1)
+            || (admin() && request.resource.data.status == 'active'))
+        && audited('brackets', id);
       allow update: if signedIn() && validBracket(request.resource.data)
+        && get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.kind == 'bracket'
         && request.resource.data.eventId == resource.data.eventId
         && request.resource.data.revision == resource.data.revision + 1
-        && ((request.resource.data.entrants == resource.data.entrants
-              && request.resource.data.get('entrantsOpen', false) == false
-              && (admin() || validWinnerAdvance(request.resource.data)))
-            || validTeamAddition(request.resource.data))
+        && (validRegistrationAppend(request.resource.data, id)
+            || validRegistrationStart(request.resource.data)
+            || (resource.data.status in ['active', 'complete']
+              && request.resource.data.status in ['active', 'complete']
+              && ((request.resource.data.entrants == resource.data.entrants
+                    && request.resource.data.get('entrantsOpen', false) == false
+                    && (admin() || validWinnerAdvance(request.resource.data)))
+                  || validEntrantAddition(request.resource.data))))
         && audited('brackets', id);
+      allow delete: if false;
+    }
+    match /games/{id} {
+      allow read: if true;
+      allow create: if signedIn() && validGame(request.resource.data, id)
+        && validGameSignup(request.resource.data) && request.resource.data.entrants.size() == 1
+        && request.resource.data.revision == 1 && audited('games', id);
+      allow update: if signedIn() && validGame(request.resource.data, id)
+        && request.resource.data.eventId == resource.data.eventId
+        && request.resource.data.revision == resource.data.revision + 1
+        && (validGameAppend(request.resource.data)
+            || (request.resource.data.entrants == resource.data.entrants
+              && ((admin() && resource.data.status == 'registration' && request.resource.data.status == 'active'
+                    && getAfter(/databases/$(database)/documents/audit/$(request.resource.data.auditId)).data.action == 'startGame')
+                  || validGameResult(request.resource.data))))
+        && audited('games', id);
       allow delete: if false;
     }
     match /audit/{id} {

@@ -27,7 +27,26 @@ export function Standings() {
     const state = snapshot.data;
     const eventGroup = (event: Competition) => {
       const bracket = state.brackets.find(b => b.eventId === event.id);
-      let rows: DisplayRow[] = eventStandings(state, event.id);
+      const game = state.games?.find(g => g.eventId === event.id);
+      let rows: DisplayRow[];
+      if (event.kind === "knockout") {
+        rows = game?.status === "complete"
+          ? eventStandings(state, event.id).map(row => ({
+              ...row,
+              result: row.rank === 1 ? "Winner" : "Registered",
+            }))
+          : (game?.entrants ?? []).map(id => ({
+              id,
+              name: state.participants.find(p => p.id === id)?.name ?? "Entrant",
+              rank: 0,
+              points: 0,
+              value: 0,
+              eventsPlayed: 0,
+              result: "Registered",
+            }));
+      } else {
+        rows = eventStandings(state, event.id);
+      }
       if (event.kind === "bracket" && bracket?.status !== "complete") {
         const entrants = bracket?.entrants ?? (event.team ? state.teams.filter(t => t.eventId === event.id).map(t => t.id) : []);
         rows = entrants.map(id => {
@@ -35,10 +54,12 @@ export function Standings() {
           const eliminated = bracket?.matches.some(m => m.winnerId && m.winnerId !== id && [m.sideA, m.sideB].includes(id));
           return { id, name: state.participants.find(p => p.id === id)?.name ?? state.teams.find(t => t.id === id)?.name ?? "Entrant", rank: 0, points: 0, value: wins, eventsPlayed: wins, result: eliminated ? "Eliminated" : wins ? `${wins} win${wins === 1 ? "" : "s"}` : "Waiting" };
         });
-      } else {
-        rows = rows.map(row => ({ ...row, result: event.kind === "bracket" ? row.rank === 1 ? "Champion" : `Place ${row.rank}` : `${formatScore(row.value, event)}${event.kind === "duration" ? "" : ` ${event.unit}`}` }));
+      } else if (event.kind === "bracket") {
+        rows = rows.map(row => ({ ...row, result: row.rank === 1 ? "Champion" : `Place ${row.rank}` }));
+      } else if (event.kind === "count" || event.kind === "duration" || event.kind === "distance") {
+        rows = rows.map(row => ({ ...row, result: `${formatScore(row.value, event)}${event.kind === "duration" ? "" : ` ${event.unit}`}` }));
       }
-      return { id: event.id, title: event.name, detail: event.kind === "bracket" ? `${event.team ? "Team championship" : "Single elimination"}, ${bracket?.status === "complete" ? "final results" : "in progress"}` : scoreLabel(event), rows };
+      return { id: event.id, title: event.name, detail: event.kind === "bracket" ? `${event.team ? "Team championship" : "Single elimination"}, ${bracket?.status === "complete" ? "final results" : bracket?.status === "active" ? "in progress" : "registration open"}` : event.kind === "knockout" ? (game?.status === "complete" ? "Winner recorded" : game?.status === "active" ? "Game in progress" : "Registration open") : scoreLabel(event), rows };
     };
     if (mode === "events" || mode === "teams") return state.events.filter(e => e.active && e.team === (mode === "teams")).map(eventGroup);
     return [{id: "overall", title: "Overall standings", detail: "Every individual event · Equal weight", rows: overallStandings(state) as DisplayRow[]}];

@@ -66,7 +66,54 @@ describe("bracket presentation", () => {
     context.snapshot.identity!.admin = true;
     const html = renderBracket();
     expect(html).toMatch(/<details[^>]*open=""/);
+    expect(html).toContain('id="bracket-entrants"');
     expect(html).toContain("Start bracket");
+  });
+
+  it("shows public registration and persisted entrants without a result editor", () => {
+    context.snapshot.data.brackets = [{ id: "carpet-ball-bracket", eventId: "carpet-ball", entrants: [context.snapshot.data.participants[0].id, context.snapshot.data.participants[1].id], matches: [], status: "registration", revision: 1, entrantsOpen: true }];
+    const html = renderBracket("carpet-ball");
+    expect(html).toContain('id="bracket-entrants"');
+    expect(html).toContain("OPEN REGISTRATION");
+    expect(html).toContain("Aaron Davis");
+    expect(html).toContain("Caleb Johnson");
+    expect(html).not.toContain("Save winner");
+  });
+
+  it("keeps team registration while requiring an administrator to start teams", () => {
+    context.snapshot.data.brackets = [];
+    const html = renderBracket("cornhole");
+    expect(html).toContain("Save team");
+    expect(html).toContain("An administrator must start this bracket after teams are registered.");
+    expect(html).toContain('href="/admin"');
+    expect(html).not.toContain("Start bracket");
+  });
+
+  it("does not enable start for administrators with unjoined teams", () => {
+    context.snapshot.data.brackets = [];
+    context.snapshot.identity!.admin = true;
+    const html = renderBracket("cornhole");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Start bracket<\/button>/);
+  });
+
+  it("enables admin start only after saved entrants join", () => {
+    const teams = context.snapshot.data.teams.filter((team) => team.eventId === "cornhole");
+    context.snapshot.data.brackets = [{ id: "cornhole-bracket", eventId: "cornhole", entrants: teams.slice(0, 2).map((team) => team.id), matches: [], status: "registration", revision: 1, entrantsOpen: true }];
+    context.snapshot.identity!.admin = true;
+    expect(renderBracket("cornhole")).toMatch(/<button[^>]*>Start bracket<\/button>/);
+
+    const participants = context.snapshot.data.participants.slice(0, 2).map((participant) => participant.id);
+    context.snapshot.data.brackets = [{ id: "carpet-ball-bracket", eventId: "carpet-ball", entrants: participants, matches: [], status: "registration", revision: 1, entrantsOpen: true }];
+    expect(renderBracket("carpet-ball")).toMatch(/<button[^>]*>Start bracket<\/button>/);
+  });
+
+  it("shows public draft joining without start or result controls", () => {
+    const participants = context.snapshot.data.participants.slice(0, 2).map((participant) => participant.id);
+    context.snapshot.data.brackets = [{ id: "carpet-ball-bracket", eventId: "carpet-ball", entrants: participants, matches: [], status: "registration", revision: 1, entrantsOpen: true }];
+    const html = renderBracket("carpet-ball");
+    expect(html).toContain("Join bracket");
+    expect(html).not.toContain("Start bracket");
+    expect(html).not.toContain('class="match-select"');
   });
 
   it("shows member details and lets an administrator add an unstarted registered team", () => {
@@ -91,5 +138,20 @@ describe("bracket presentation", () => {
     expect(renderBracket("cornhole")).not.toContain("Add to bracket");
     context.snapshot.identity!.admin = false;
     expect(renderBracket("cornhole")).not.toContain("Add to bracket");
+  });
+
+  it("hides team creation after start for public viewers", () => {
+    const teams = context.snapshot.data.teams.filter((team) => team.eventId === "cornhole");
+    context.snapshot.data.brackets = [createBracket("cornhole", teams.slice(0, 2).map((team) => team.id))];
+    expect(renderBracket("cornhole")).not.toContain("Save team");
+  });
+
+  it("shows participant additions only to admins before the first result", () => {
+    const participants = context.snapshot.data.participants.slice(0, 2).map((participant) => participant.id);
+    context.snapshot.data.brackets = [createBracket("carpet-ball", participants)];
+    context.snapshot.identity!.admin = true;
+    expect(renderBracket("carpet-ball")).toContain("Add to bracket");
+    context.snapshot.identity!.admin = false;
+    expect(renderBracket("carpet-ball")).not.toContain("Add to bracket");
   });
 });

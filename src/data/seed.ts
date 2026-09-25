@@ -6,6 +6,7 @@ import type {
   AuditEntry,
   Bracket,
   ConferenceState,
+  KnockoutGame,
   Participant,
   Team,
 } from "@/domain/types";
@@ -179,6 +180,19 @@ function createDemoBrackets(): Bracket[] {
   return brackets;
 }
 
+function createDemoGames(): KnockoutGame[] {
+  const event = initialEvents.find((item) => item.id === "lightning-knockout");
+  if (!event || (event.kind !== "knockout" && event.kind !== "bracket")) return [];
+  return [{
+    id: "lightning-knockout-game",
+    eventId: "lightning-knockout",
+    entrants: participants.slice(0, 2).map((participant) => participant.id),
+    status: "registration",
+    winnerId: null,
+    revision: 1,
+  }];
+}
+
 const audit: AuditEntry[] = [];
 
 export function createSeedState(): ConferenceState {
@@ -189,6 +203,7 @@ export function createSeedState(): ConferenceState {
     teams: teams.map((team) => ({ ...team, memberIds: [...team.memberIds] })),
     attempts: numericAttempts.map((attempt) => ({ ...attempt })),
     brackets: createDemoBrackets(),
+    games: createDemoGames(),
     audit: audit.map((entry) => ({ ...entry })),
   };
 }

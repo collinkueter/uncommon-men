@@ -1,0 +1,19 @@
+.knockout-page h2 { margin: 1.5rem 0 0.45rem; font: 800 1.35rem / 1 var(--font-display); letter-spacing: .03em; }
+.knockout-panel { margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-translucent); }
+.knockout-panel > p { margin-top: 0; color: var(--color-muted); }
+.knockout-panel .button { margin-top: 1rem; }
+.knockout-start { display: flex; align-items: center; gap: .45rem; margin-left: auto; }
+.knockout-roster { margin-top: 1.5rem; }
+.knockout-roster h3, .knockout-correction h3 { margin: 0 0 .5rem; font: 800 1rem / 1 var(--font-display); letter-spacing: .05em; }
+.knockout-roster ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--color-border-subtle); }
+.knockout-roster li { padding: .65rem .75rem; border-bottom: 1px solid var(--color-border-subtle); }
+.winner-choices { display: grid; gap: .6rem; margin: 1.25rem 0 0; padding: 0; border: 0; }
+.winner-choices legend { margin-bottom: .25rem; font-weight: 700; }
+.winner-choices label { display: flex; align-items: center; gap: .65rem; min-height: 46px; padding: .55rem .75rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-surface); cursor: pointer; }
+.winner-choices input { width: auto; min-height: 0; }
+.knockout-winner { display: flex; align-items: center; gap: .5rem; color: var(--color-accent) !important; font-size: 1.1rem; }
+.knockout-winner svg { width: 20px; }
+.knockout-correction { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--color-border-subtle); }
+.knockout-correction label { display: grid; gap: .35rem; margin-top: 1rem; font-weight: 600; }
+.knockout-correction textarea { min-height: 100px; }
+@media (max-width: 760px) { .knockout-panel { padding: 1rem; } }

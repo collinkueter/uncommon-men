@@ -21,6 +21,7 @@ export const withDemo = (path: string) =>
   `${path}${demoQuery() ? (path.includes("?") ? "&" : "?") + "demo=1" : ""}`;
 export const scoreLabel = (event: Competition) => {
   if (event.kind === "bracket") return event.team ? "Team bracket" : "Bracket";
+  if (event.kind === "knockout") return "Single-winner game";
   if (event.kind === "duration")
     return event.direction === "higher" ? "Longest time" : "Fastest time";
   if (event.kind === "distance")

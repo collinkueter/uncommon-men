@@ -51,6 +51,18 @@ beforeEach(async () => {
         active: true,
         auditId: "seed-event",
       }),
+      setDoc(doc(db, "events", "chess"), {
+        categoryId: "strategy",
+        name: "Chess",
+        kind: "bracket",
+        direction: "higher",
+        unit: "match",
+        team: false,
+        teamSize: 0,
+        instructions: "",
+        active: true,
+        auditId: "seed-chess-event",
+      }),
       setDoc(doc(db, "participants", "p1"), {
         name: "Participant",
         normalizedName: "participant",

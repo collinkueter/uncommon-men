@@ -24,6 +24,7 @@ const state = (overrides: Partial<ConferenceState> = {}): ConferenceState => ({
   teams: [],
   attempts: [],
   brackets: [],
+  games: [],
   audit: [],
   ...overrides,
 });

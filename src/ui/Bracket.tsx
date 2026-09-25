@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Check, Trophy } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
 import type { Competition, Match } from "@/domain/types";
-import { canAddBracketEntrants } from "@/domain/ranking";
+import { canAddBracketEntrants, createBracket } from "@/domain/ranking";
 import { ParticipantPicker } from "./ParticipantPicker";
 import { Button, PageShell, useMediaQuery, withDemo } from "./shared";
 import "./BracketRoster.css";
@@ -15,6 +15,7 @@ export function Bracket({ event }: { event: Competition }) {
   const [selectedMatchId, setSelectedMatchId] = useState("");
   const [teamName, setTeamName] = useState("");
   const [members, setMembers] = useState<string[]>([]);
+  const [lateEntrant, setLateEntrant] = useState<string[]>([]);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState("");
@@ -27,25 +28,31 @@ export function Bracket({ event }: { event: Competition }) {
   const editorRef = useRef<HTMLElement>(null);
   const revisionRef = useRef<number | null>(null);
   const [mobileRound, setMobileRound] = useState(1);
+  const registrationOpen = !bracket || bracket.status === "registration";
+  const registeredEntrants = bracket?.entrants ?? [];
+  const previewBracket = useMemo(() => registrationOpen && registeredEntrants.length >= 2
+    ? createBracket(event.id, registeredEntrants)
+    : null, [event.id, registrationOpen, registeredEntrants]);
+  const boardBracket = bracket?.status === "registration" ? previewBracket : bracket;
   const names = (id: string | null) =>
     snapshot.data.teams.find((t) => t.id === id)?.name ??
     snapshot.data.participants.find((p) => p.id === id)?.name ??
     "TBD";
   const rounds = useMemo(
-    () => (bracket ? [...new Set(bracket.matches.map((m) => m.round))].sort((a, b) => a - b) : []),
-    [bracket],
+    () => (boardBracket ? [...new Set(boardBracket.matches.map((m) => m.round))].sort((a, b) => a - b) : []),
+    [boardBracket],
   );
-  const selectable = bracket?.matches.find((m) => {
+  const selectable = registrationOpen ? undefined : (bracket?.matches.find((m) => {
     if (m.id !== selectedMatchId || !m.sideA || !m.sideB) return false;
     return !m.winnerId || Boolean(snapshot.identity?.admin);
-  }) ?? (selectedMatchId ? undefined : bracket?.matches.find((m) => m.sideA && m.sideB && !m.winnerId));
+  }) ?? (selectedMatchId ? undefined : bracket?.matches.find((m) => m.sideA && m.sideB && !m.winnerId)));
   const finalRound = rounds[rounds.length - 1] ?? 1;
   // Show one round at a time whenever the full tree would need sideways
   // scrolling on a phone or tablet. Wide screens keep the whole board.
   const stacked = useMediaQuery(`(max-width: ${Math.max(760, Math.min(1000, rounds.length * 272 + 80))}px)`);
   const toPlay = (round: number) =>
-    bracket?.matches.filter((m) => m.round === round && m.sideA && m.sideB && !m.winnerId).length ?? 0;
-  const champion = bracket?.matches.find((m) => m.round === finalRound)?.winnerId;
+    boardBracket?.matches.filter((m) => m.round === round && m.sideA && m.sideB && !m.winnerId).length ?? 0;
+  const champion = boardBracket?.matches.find((m) => m.round === finalRound)?.winnerId;
   const matchLabel = (match: { round: number; position: number }) => `Round ${match.round}, match ${match.position + 1}`;
   const sideName = (match: Match, id: string | null, side: "A" | "B") => {
     if (id) return names(id);
@@ -83,11 +90,13 @@ export function Bracket({ event }: { event: Competition }) {
       setReason("");
       setBracketError("");
     }
-    if (bracket && (firstBracket || revisionChanged || !rounds.includes(mobileRound))) {
-      const pending = bracket.matches.find((match) => match.sideA && match.sideB && !match.winnerId);
+    if (registrationOpen && (firstBracket || revisionChanged)) {
+      setMobileRound(1);
+    } else if (boardBracket && (firstBracket || revisionChanged || !rounds.includes(mobileRound))) {
+      const pending = boardBracket.matches.find((match) => match.sideA && match.sideB && !match.winnerId);
       setMobileRound(pending?.round ?? finalRound);
     }
-  }, [bracket, bracket?.revision, finalRound, mobileRound, rounds, selectedMatchId, snapshot.identity?.admin]);
+  }, [boardBracket, bracket, bracket?.revision, finalRound, mobileRound, registrationOpen, rounds, selectedMatchId, snapshot.identity?.admin]);
   const saveWinner = async () => {
     if (saving || !bracket || !selectable || !winner) return;
     if (winner !== selectable.sideA && winner !== selectable.sideB) {
@@ -141,17 +150,19 @@ export function Bracket({ event }: { event: Competition }) {
         ...(editingTeamId ? { teamId: editingTeamId } : {}),
         name: teamName.trim(),
         memberIds: members,
-      } as Parameters<typeof execute>[0]);
+      });
       setTeamName("");
       setMembers([]);
       setEditingTeamId(null);
       setRosterMessage(bracket && !wasEditing
-        ? canAddBracketEntrants(bracket)
+        ? registrationOpen
+          ? "Team saved and joined the bracket."
+          : canAddBracketEntrants(bracket)
           ? "Team saved. An administrator can now choose Add to bracket below."
           : "Team saved outside the current bracket. Entrants are locked because a result has been recorded."
         : bracket
           ? "Team changes saved. Current matchups and recorded results remain preserved."
-        : "Team saved and available as a bracket entrant.");
+        : "Team saved and joined the bracket.");
     } catch {
       setBracketError("Could not save that team.");
     } finally {
@@ -184,14 +195,47 @@ export function Bracket({ event }: { event: Competition }) {
       return false;
     }
   };
+  const joinBracket = async (entrantId: string) => {
+    if (saving || !registrationOpen) return;
+    setSaving(true);
+    setBracketError("");
+    setRosterMessage("");
+    try {
+          await execute({ type: "joinBracket", eventId: event.id, entrantId });
+      setRosterMessage("Joined bracket.");
+    } catch {
+      setBracketError("Could not join the bracket. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const joinSelected = async () => {
+    if (saving || !registrationOpen || !members.length) return;
+    const selected = [...members];
+    setSaving(true);
+    setBracketError("");
+    setRosterMessage("");
+    let joined = 0;
+    try {
+      for (const entrantId of selected) {
+        await execute({ type: "joinBracket", eventId: event.id, entrantId });
+        joined += 1;
+        setMembers((current) => current.filter((id) => id !== entrantId));
+      }
+      setRosterMessage("Joined bracket.");
+    } catch {
+      setBracketError(joined ? "Some selected players joined; try again to add the rest." : "Could not join the selected players. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
   const start = async () => {
-    const entrants = event.team
-      ? snapshot.data.teams
-          .filter((t) => t.eventId === event.id)
-          .map((t) => t.id)
-      : members;
+    const entrants = bracket?.entrants ?? [];
     if (!snapshot.identity?.admin || saving) return;
-    if (entrants.length < 2) { setBracketError("Select at least two entrants before starting."); return; }
+    if (entrants.length < 2) {
+      setBracketError("At least two registered entrants are required before starting.");
+      return;
+    }
     setSaving(true);
     setBracketError("");
     try {
@@ -233,25 +277,39 @@ export function Bracket({ event }: { event: Competition }) {
       setSaving(false);
     }
   };
-  const bracketBoard = bracket && (
+  const addBracketParticipant = async () => {
+    if (saving || !bracket || !snapshot.identity?.admin || !canAddBracketEntrants(bracket) || lateEntrant.length !== 1) return;
+    setSaving(true);
+    setBracketError("");
+    try {
+      await execute({ type: "addBracketParticipant", bracketId: bracket.id, participantId: lateEntrant[0], revision: bracket.revision });
+      setLateEntrant([]);
+      setRosterMessage("Participant added to the current bracket.");
+    } catch {
+      setBracketError("Could not add that participant. The bracket may have changed or already have a result.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const bracketBoard = boardBracket && (
     <section className={`bracket-workspace ${stacked ? "stacked" : ""}`} aria-labelledby="bracket-title">
       <div className="bracket-workspace-heading">
         <div>
-          <h2 id="bracket-title">{bracket.status === "complete" ? "CHAMPIONSHIP COMPLETE" : "LIVE BRACKET"}</h2>
+          <h2 id="bracket-title">{registrationOpen ? "OPEN REGISTRATION" : bracket?.status === "complete" ? "CHAMPIONSHIP COMPLETE" : "LIVE BRACKET"}</h2>
         </div>
-        {champion && bracket.status === "complete" && <p className="bracket-champion"><Trophy aria-hidden="true" /> Champion: <strong>{names(champion)}</strong></p>}
+        {champion && bracket?.status === "complete" && <p className="bracket-champion"><Trophy aria-hidden="true" /> Champion: <strong>{names(champion)}</strong></p>}
       </div>
       <nav className="round-nav" aria-label="Bracket rounds">
         {rounds.map((round) => <button key={round} type="button" className={mobileRound === round ? "selected" : ""} aria-current={mobileRound === round ? "true" : undefined} onClick={() => setMobileRound(round)}>{roundLabel(round)}{toPlay(round) > 0 && <small>{toPlay(round)} to play</small>}</button>)}
       </nav>
-      <p className="bracket-help">{bracket.status === "complete" ? snapshot.identity?.admin ? "Select a completed match to correct its result." : "Follow each round to see the path to the championship." : "Select a ready match to record its winner."}</p>
+      <p className="bracket-help">{registrationOpen ? "Preview updates as people join. Matchups are set when the bracket starts." : bracket?.status === "complete" ? snapshot.identity?.admin ? "Select a completed match to correct its result." : "Follow each round to see the path to the championship." : "Select a ready match to record its winner."}</p>
       <div className="bracket-board" role="region" tabIndex={0} aria-label="Single elimination bracket" style={{ "--round-count": rounds.length, "--tree-rows": 2 ** (rounds.length), "--tree-end": 2 ** (rounds.length) + 2 } as CSSProperties}>
         {rounds.map((round) => (
           <section className={`round ${mobileRound === round ? "mobile-active" : ""}`} key={round} aria-labelledby={`round-${round}`}>
             <h3 id={`round-${round}`}>{roundLabel(round)}</h3>
-            {bracket.matches.filter((m) => m.round === round).sort((a, b) => a.position - b.position).map((m) => {
+            {boardBracket.matches.filter((m) => m.round === round).sort((a, b) => a.position - b.position).map((m) => {
               const state = matchState(m);
-              const isSelectable = Boolean(m.sideA && m.sideB && (!m.winnerId || snapshot.identity?.admin));
+              const isSelectable = Boolean(!registrationOpen && m.sideA && m.sideB && (!m.winnerId || snapshot.identity?.admin));
               const sideAName = sideName(m, m.sideA, "A");
               const sideBName = sideName(m, m.sideB, "B");
               const selectMatch = () => {
@@ -311,9 +369,9 @@ export function Bracket({ event }: { event: Competition }) {
             {event.team ? "Team championship. Separate from individual points." : "Individual championship. Counts toward overall points."}
           </p>
         </header>
-        <div className={`bracket-play ${!bracket ? "bracket-not-started" : ""}`}>
+        <div className={`bracket-play ${!boardBracket ? "bracket-not-started" : ""} ${registrationOpen ? "registration" : ""}`}>
           {bracketBoard}
-        <aside className="winner-panel" ref={editorRef} aria-labelledby="bracket-editor-title" aria-live="polite" tabIndex={-1}>
+        {!registrationOpen && <aside className="winner-panel" ref={editorRef} aria-labelledby="bracket-editor-title" aria-live="polite" tabIndex={-1}>
           {selectable ? (
             <>
               <h2 id="bracket-editor-title">
@@ -380,18 +438,18 @@ export function Bracket({ event }: { event: Competition }) {
               </p>
             </>
           )}
-        </aside>
+        </aside>}
         </div>
-          <details className="bracket-roster-details" open={!bracket}>
+          <details className="bracket-roster-details" open={registrationOpen}>
             <summary>Roster and entrants</summary>
           <section className="bracket-roster" aria-labelledby="bracket-roster-title">
             <div className="bracket-roster-heading">
               <div>
                 <h2 id="bracket-roster-title">MANAGE {event.team ? "TEAMS" : "PARTICIPANTS"}</h2>
               </div>
-              {bracket && <p className="roster-note">{event.team ? "You can create or edit teams here. Add a registered team while the bracket is open; matchups and byes will be rearranged. After the first result, the bracket is locked." : "This bracket has started. Matchups and recorded results are preserved."}</p>}
+              {bracket && <p className="roster-note">{registrationOpen ? "Registration is open. Everyone can join, and the preview updates as entrants are registered." : event.team ? snapshot.identity?.admin ? "You can edit teams here. New team registration is closed; administrators can add eligible registered teams before the first result." : "Team registration is closed after the bracket starts. Ask an administrator about roster changes." : "This bracket has started. Matchups and recorded results are preserved."}</p>}
             </div>
-            {event.team && (
+            {event.team && (registrationOpen || snapshot.identity?.admin) && (
               <div className="team-registration">
                 <h3>{editingTeamId ? "EDIT TEAM" : "REGISTER A TEAM"}</h3>
                 <p className="event-instructions">{event.teamSize > 0 ? `Select exactly ${event.teamSize} members.` : "Select any members, or leave the roster empty."}</p>
@@ -408,23 +466,49 @@ export function Bracket({ event }: { event: Competition }) {
                 </form>
               </div>
             )}
-            {!bracket && (
+            {registrationOpen && (
               <div className="bracket-start-roster">
                 <h3>SELECT ENTRANTS</h3>
-                <p>{event.team ? "Saved teams become entrants when you start this bracket." : "Select participants for this bracket."}</p>
-                {!event.team && <ParticipantPicker id="bracket-entrants" label="Entrants" participants={snapshot.data.participants} selected={members} onChange={setMembers} onCreate={addParticipant} />}
+                <p>{event.team ? "Join a registered team below. An administrator starts the bracket when registration closes." : "Select people to join this bracket. Add a new participant if their name is missing."}</p>
+                {!event.team && <><ParticipantPicker id="bracket-entrants" label="Entrants" participants={snapshot.data.participants.filter((participant) => !registeredEntrants.includes(participant.id))} selected={members} onChange={setMembers} max={0} onCreate={addParticipant} /><Button type="button" className="primary" disabled={saving || !members.length} onClick={() => void joinSelected()}>{saving ? "Joining…" : "Join bracket"}</Button></>}
+              </div>
+            )}
+            {!event.team && bracket && snapshot.identity?.admin && canAddBracketEntrants(bracket) && (
+              <div className="bracket-start-roster">
+                <h3>ADD PARTICIPANT</h3>
+                <p>Administrators can add a participant while the bracket has no recorded result.</p>
+                <ParticipantPicker id="bracket-late-entrant" label="Participant" participants={snapshot.data.participants.filter((participant) => !registeredEntrants.includes(participant.id))} selected={lateEntrant} onChange={setLateEntrant} max={1} onCreate={addParticipant} />
+                <Button type="button" className="primary" disabled={saving || lateEntrant.length !== 1} onClick={() => void addBracketParticipant()}>Add to bracket</Button>
+              </div>
+            )}
+            {!event.team && bracket && (
+              <div className="registered-teams">
+                <h3>REGISTERED ENTRANTS</h3>
+                {registeredEntrants.length === 0 && <p className="roster-note">No participants have joined yet.</p>}
+                {registeredEntrants.map((entrantId) => <article className="registered-team" key={entrantId}><div><strong>{names(entrantId)}</strong></div><span className="team-status in-bracket">{registrationOpen ? "Joined bracket" : "In current bracket"}</span></article>)}
               </div>
             )}
             {event.team && <div className="registered-teams">
               <h3>REGISTERED TEAMS</h3>
               {eventTeams.length === 0 && <p className="roster-note">No teams registered yet.</p>}
               {eventTeams.map((team) => {
-                const inBracket = bracket?.entrants.includes(team.id) ?? false;
+                const inBracket = registeredEntrants.includes(team.id);
                 const canAdd = Boolean(bracket && !inBracket && snapshot.identity?.admin && canAddBracketEntrants(bracket));
-                return <article className="registered-team" key={team.id}><div><strong>{team.name}</strong><span>{memberNames(team) || "No members listed"}</span></div><span className={`team-status ${inBracket ? "in-bracket" : "out-bracket"}`}>{inBracket ? "In current bracket" : "Not in current bracket"}</span>{snapshot.identity?.admin && <div className="registered-team-actions"><Button type="button" onClick={() => editTeam(team)}>Edit team</Button>{canAdd && <Button type="button" className="primary" disabled={saving} onClick={() => void addBracketTeam(team.id)}>Add to bracket</Button>}</div>}</article>;
+                return <article className="registered-team" key={team.id}><div><strong>{team.name}</strong><span>{memberNames(team) || "No members listed"}</span></div><span className={`team-status ${inBracket ? "in-bracket" : "out-bracket"}`}>{inBracket ? (registrationOpen ? "Joined bracket" : "In current bracket") : (registrationOpen ? "Open to join" : "Not in current bracket")}</span><div className="registered-team-actions">{registrationOpen && !inBracket && <Button type="button" className="primary" disabled={saving} onClick={() => void joinBracket(team.id)}>Join bracket</Button>}{snapshot.identity?.admin && <><Button type="button" onClick={() => editTeam(team)}>Edit team</Button>{canAdd && <Button type="button" className="primary" disabled={saving} onClick={() => void addBracketTeam(team.id)}>Add to bracket</Button>}</>}</div></article>;
               })}
             </div>}
-            {!bracket && <div className="bracket-start"><h3>READY TO START?</h3><p>Add at least two {event.team ? "teams" : "participants"}, then create the bracket.</p>{snapshot.identity?.admin && <Button type="button" className="primary" disabled={saving} onClick={start}>Start bracket</Button>}</div>}
+            {registrationOpen && (
+              <div className="bracket-start">
+                <h3>READY TO START?</h3>
+                <p>
+                  {snapshot.identity?.admin
+                    ? `Add at least two ${event.team ? "teams" : "participants"}, then create the bracket.`
+                    : event.team ? "An administrator must start this bracket after teams are registered." : "Join at least two players; an administrator starts the bracket."}
+                </p>
+                {event.team && !snapshot.identity?.admin && <p><Link to={withDemo("/admin")}>Administrator sign-in</Link></p>}
+                {snapshot.identity?.admin && <Button type="button" className="primary" disabled={saving || registeredEntrants.length < 2} onClick={start}>Start bracket</Button>}
+              </div>
+            )}
             {bracketError && <p className="form-message" role="alert">{bracketError}</p>}
             {rosterMessage && <p className="form-message roster-success" role="status">{rosterMessage}</p>}
           </section>

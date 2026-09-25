@@ -28,7 +28,7 @@ export function Results() {
     [snapshot.data, participantId],
   );
   const bests = snapshot.data.events.flatMap((event) => {
-    if (!participantId || !event.active || event.kind === "bracket") return [];
+    if (!participantId || !event.active || event.kind === "bracket" || event.kind === "knockout") return [];
     const attempt = getBestAttempt(snapshot.data, event.id, participantId);
     return attempt ? [{ event, attempt }] : [];
   });

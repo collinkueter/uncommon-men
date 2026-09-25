@@ -200,6 +200,7 @@ function AdminEvents({
               { value: "duration", label: "Duration" },
               { value: "distance", label: "Distance" },
               { value: "bracket", label: "Bracket" },
+              { value: "knockout", label: "Single-winner game" },
             ]}
           />
         </div>
@@ -278,6 +279,9 @@ function AdminEvents({
               <Link to={withDemo(`/events/${e.id}`)}>
                 {e.team ? "Manage teams & bracket" : "Manage participants & bracket"}
               </Link>
+            )}
+            {e.kind === "knockout" && (
+              <Link to={withDemo(`/events/${e.id}`)}>Manage game</Link>
             )}
             <Button type="button" onClick={() => setDraft(e)}>Edit</Button>
           </article>

@@ -137,6 +137,25 @@ function bracketStandings(
   ).map((standing) => ({ ...standing, value: standing.rank }));
 }
 
+function knockoutStandings(
+  state: ConferenceState,
+  event: Competition,
+): Standing[] {
+  const game = (state.games ?? []).find((item) => item.eventId === event.id);
+  if (!game || game.status !== "complete" || !game.winnerId) return [];
+  if (!game.entrants.includes(game.winnerId)) return [];
+  const names = new Map(state.participants.map((p) => [p.id, p.name]));
+  const registered = [...new Set(game.entrants)];
+  return [game.winnerId, ...registered.filter((id) => id !== game.winnerId)].map((id) => ({
+    id,
+    name: names.get(id) ?? id,
+    rank: id === game.winnerId ? 1 : 0,
+    points: id === game.winnerId ? 10 : 0,
+    value: id === game.winnerId ? 1 : 0,
+    eventsPlayed: 1,
+  }));
+}
+
 export function eventStandings(
   state: ConferenceState,
   eventId: string,
@@ -144,6 +163,7 @@ export function eventStandings(
   const event = state.events.find((item) => item.id === eventId);
   if (!event) return [];
   if (event.kind === "bracket") return bracketStandings(state, event);
+  if (event.kind === "knockout") return knockoutStandings(state, event);
   const people = event.team
     ? state.teams
         .filter((t) => t.eventId === eventId)
@@ -349,6 +369,38 @@ export function createBracket(eventId: string, entrantIds: string[]): Bracket {
     revision: 0,
     entrantsOpen: true,
   });
+}
+
+export function createRegistrationBracket(eventId: string): Bracket {
+  if (!eventId) throw new Error("A bracket event is required");
+  return {
+    id: `${eventId}-bracket`,
+    eventId,
+    entrants: [],
+    matches: [],
+    status: "registration",
+    // The empty draft is persisted only after its first entrant is appended;
+    // appendRegistrationEntrant then gives the saved registration revision 1.
+    revision: 0,
+    entrantsOpen: true,
+  };
+}
+
+export function appendRegistrationEntrant(
+  bracket: Bracket,
+  entrantId: string,
+): Bracket {
+  if (bracket.status !== "registration" || !bracket.entrantsOpen)
+    throw new Error("Bracket registration is closed.");
+  if (!entrantId) throw new Error("A bracket entrant is required.");
+  if (bracket.entrants.includes(entrantId)) return bracket;
+  if (bracket.entrants.length >= 128)
+    throw new Error("A bracket can have at most 128 entrants.");
+  return {
+    ...bracket,
+    entrants: [...bracket.entrants, entrantId],
+    revision: bracket.revision + 1,
+  };
 }
 
 export function canAddBracketEntrants(bracket: Bracket): boolean {
