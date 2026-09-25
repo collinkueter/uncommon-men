@@ -111,7 +111,7 @@ describe("bracket presentation", () => {
     const participants = context.snapshot.data.participants.slice(0, 2).map((participant) => participant.id);
     context.snapshot.data.brackets = [{ id: "carpet-ball-bracket", eventId: "carpet-ball", entrants: participants, matches: [], status: "registration", revision: 1, entrantsOpen: true }];
     const html = renderBracket("carpet-ball");
-    expect(html).toContain("Join bracket");
+    expect(html).toContain("Sign up selected");
     expect(html).not.toContain("Start bracket");
     expect(html).not.toContain('class="match-select"');
   });
@@ -144,6 +144,33 @@ describe("bracket presentation", () => {
     const teams = context.snapshot.data.teams.filter((team) => team.eventId === "cornhole");
     context.snapshot.data.brackets = [createBracket("cornhole", teams.slice(0, 2).map((team) => team.id))];
     expect(renderBracket("cornhole")).not.toContain("Save team");
+  });
+
+  it("offers one-tap self signup and confirms it once registered", () => {
+    const me = context.snapshot.data.participants[0];
+    context.snapshot.identity!.participantId = me.id;
+    context.snapshot.data.brackets = [];
+    expect(renderBracket("carpet-ball")).toContain(`Sign me up as ${me.name}`);
+    context.snapshot.data.brackets = [{ id: "carpet-ball-bracket", eventId: "carpet-ball", entrants: [me.id], matches: [], status: "registration", revision: 1, entrantsOpen: true }];
+    const html = renderBracket("carpet-ball");
+    expect(html).not.toContain("Sign me up");
+    expect(html).toContain("You&#x27;re signed up as");
+    expect(html).not.toContain("Start bracket");
+  });
+
+  it("offers to sign up the viewer's own team and hides signup once started", () => {
+    const team = context.snapshot.data.teams.find((item) => item.eventId === "cornhole")!;
+    context.snapshot.identity!.participantId = team.memberIds[0];
+    context.snapshot.data.brackets = [];
+    expect(renderBracket("cornhole")).toContain(`Sign up ${team.name}`);
+    context.snapshot.data.brackets = [createBracket("cornhole", [team.id, context.snapshot.data.teams.find((item) => item.eventId === "cornhole" && item.id !== team.id)!.id])];
+    expect(renderBracket("cornhole")).not.toContain('id="bracket-signup-title"');
+  });
+
+  it("asks for a name before signup", () => {
+    context.snapshot.identity = null;
+    context.snapshot.data.brackets = [];
+    expect(renderBracket("carpet-ball")).toContain("Enter your name");
   });
 
   it("shows participant additions only to admins before the first result", () => {

@@ -28,7 +28,15 @@ export function Bracket({ event }: { event: Competition }) {
   const editorRef = useRef<HTMLElement>(null);
   const revisionRef = useRef<number | null>(null);
   const [mobileRound, setMobileRound] = useState(1);
+  const prefilledTeam = useRef(false);
   const registrationOpen = !bracket || bracket.status === "registration";
+  // Start a new team registration with the signed-in person already on it.
+  useEffect(() => {
+    const me = snapshot.identity?.participantId;
+    if (prefilledTeam.current || !event.team || !registrationOpen || !me) return;
+    prefilledTeam.current = true;
+    setMembers((current) => current.length ? current : [me]);
+  }, [event.team, registrationOpen, snapshot.identity?.participantId]);
   const registeredEntrants = bracket?.entrants ?? [];
   const previewBracket = useMemo(() => registrationOpen && registeredEntrants.length >= 2
     ? createBracket(event.id, registeredEntrants)
@@ -156,13 +164,13 @@ export function Bracket({ event }: { event: Competition }) {
       setEditingTeamId(null);
       setRosterMessage(bracket && !wasEditing
         ? registrationOpen
-          ? "Team saved and joined the bracket."
+          ? "Team saved and signed up."
           : canAddBracketEntrants(bracket)
           ? "Team saved. An administrator can now choose Add to bracket below."
           : "Team saved outside the current bracket. Entrants are locked because a result has been recorded."
         : bracket
           ? "Team changes saved. Current matchups and recorded results remain preserved."
-        : "Team saved and joined the bracket.");
+        : "Team saved and signed up.");
     } catch {
       setBracketError("Could not save that team.");
     } finally {
@@ -201,8 +209,10 @@ export function Bracket({ event }: { event: Competition }) {
     setBracketError("");
     setRosterMessage("");
     try {
-          await execute({ type: "joinBracket", eventId: event.id, entrantId });
-      setRosterMessage("Joined bracket.");
+      await execute({ type: "joinBracket", eventId: event.id, entrantId });
+      // The Sign up panel confirms your own entry in place.
+      const mine = entrantId === myId || myTeams.some((team) => team.id === entrantId);
+      if (!mine) setRosterMessage(`${names(entrantId)} is signed up.`);
     } catch {
       setBracketError("Could not join the bracket. Try again.");
     } finally {
@@ -222,7 +232,7 @@ export function Bracket({ event }: { event: Competition }) {
         joined += 1;
         setMembers((current) => current.filter((id) => id !== entrantId));
       }
-      setRosterMessage("Joined bracket.");
+      setRosterMessage("Selected players are signed up.");
     } catch {
       setBracketError(joined ? "Some selected players joined; try again to add the rest." : "Could not join the selected players. Try again.");
     } finally {
@@ -253,6 +263,10 @@ export function Bracket({ event }: { event: Competition }) {
     }
   };
   const eventTeams = snapshot.data.teams.filter((team) => team.eventId === event.id);
+  const myId = snapshot.identity?.participantId;
+  const myTeams = myId ? eventTeams.filter((team) => team.memberIds.includes(myId)) : [];
+  // Individual signups report next to the Sign up panel; team forms report in the roster below.
+  const signupMessages = registrationOpen && !event.team;
   const teamForId = (id: string | null) => id ? snapshot.data.teams.find((team) => team.id === id) : undefined;
   const memberNames = (team: (typeof eventTeams)[number]) =>
     team.memberIds
@@ -369,6 +383,28 @@ export function Bracket({ event }: { event: Competition }) {
             {event.team ? "Team championship. Separate from individual points." : "Individual championship. Counts toward overall points."}
           </p>
         </header>
+        {registrationOpen && (
+          <section className="bracket-signup" aria-labelledby="bracket-signup-title">
+            <h2 id="bracket-signup-title">SIGN UP</h2>
+            <p className="roster-note">Registration is open until an administrator starts the bracket.</p>
+            {!snapshot.identity?.name.trim() ? (
+              <p><Link to={withDemo(`/welcome?next=${encodeURIComponent(`/events/${event.id}`)}`)}>Enter your name</Link> to sign up.</p>
+            ) : event.team ? (
+              myTeams.length ? myTeams.map((team) => registeredEntrants.includes(team.id)
+                ? <p className="signup-done" key={team.id}><Check aria-hidden="true" /><span><strong>{team.name}</strong> is signed up.</span></p>
+                : <Button key={team.id} type="button" className="primary" disabled={saving} onClick={() => void joinBracket(team.id)}>Sign up {team.name}</Button>)
+                : <p>Register your team below. It is signed up as soon as it is saved.</p>
+            ) : myId && registeredEntrants.includes(myId) ? (
+              <p className="signup-done"><Check aria-hidden="true" /><span>You're signed up as <strong>{names(myId)}</strong>.</span></p>
+            ) : myId ? (
+              <Button type="button" className="primary" disabled={saving} onClick={() => void joinBracket(myId)}>{saving ? "Signing up…" : `Sign me up as ${names(myId)}`}</Button>
+            ) : (
+              <p>Find your name under Roster and entrants below.</p>
+            )}
+            {signupMessages && bracketError && <p className="form-message" role="alert">{bracketError}</p>}
+            {signupMessages && rosterMessage && <p className="form-message roster-success" role="status">{rosterMessage}</p>}
+          </section>
+        )}
         <div className={`bracket-play ${!boardBracket ? "bracket-not-started" : ""} ${registrationOpen ? "registration" : ""}`}>
           {bracketBoard}
         {!registrationOpen && <aside className="winner-panel" ref={editorRef} aria-labelledby="bracket-editor-title" aria-live="polite" tabIndex={-1}>
@@ -451,7 +487,7 @@ export function Bracket({ event }: { event: Competition }) {
             </div>
             {event.team && (registrationOpen || snapshot.identity?.admin) && (
               <div className="team-registration">
-                <h3>{editingTeamId ? "EDIT TEAM" : "REGISTER A TEAM"}</h3>
+                <h3>{editingTeamId ? "EDIT TEAM" : registrationOpen ? "SIGN UP YOUR TEAM" : "REGISTER A TEAM"}</h3>
                 <p className="event-instructions">{event.teamSize > 0 ? `Select exactly ${event.teamSize} members.` : "Select any members, or leave the roster empty."}</p>
                 <form onSubmit={(formEvent) => { formEvent.preventDefault(); void createTeam(); }}>
                   <div className="bracket-field">
@@ -468,9 +504,9 @@ export function Bracket({ event }: { event: Competition }) {
             )}
             {registrationOpen && (
               <div className="bracket-start-roster">
-                <h3>SELECT ENTRANTS</h3>
-                <p>{event.team ? "Join a registered team below. An administrator starts the bracket when registration closes." : "Select people to join this bracket. Add a new participant if their name is missing."}</p>
-                {!event.team && <><ParticipantPicker id="bracket-entrants" label="Entrants" participants={snapshot.data.participants.filter((participant) => !registeredEntrants.includes(participant.id))} selected={members} onChange={setMembers} max={0} onCreate={addParticipant} /><Button type="button" className="primary" disabled={saving || !members.length} onClick={() => void joinSelected()}>{saving ? "Joining…" : "Join bracket"}</Button></>}
+                <h3>{event.team ? "SIGN UP A REGISTERED TEAM" : "SIGN UP SOMEONE ELSE"}</h3>
+                <p>{event.team ? "Sign up any saved team below. An administrator starts the bracket when registration closes." : "Sign up other players. Add a new participant if their name is missing."}</p>
+                {!event.team && <><ParticipantPicker id="bracket-entrants" label="Entrants" participants={snapshot.data.participants.filter((participant) => !registeredEntrants.includes(participant.id))} selected={members} onChange={setMembers} max={0} onCreate={addParticipant} /><Button type="button" className="primary" disabled={saving || !members.length} onClick={() => void joinSelected()}>{saving ? "Signing up…" : "Sign up selected"}</Button></>}
               </div>
             )}
             {!event.team && bracket && snapshot.identity?.admin && canAddBracketEntrants(bracket) && (
@@ -485,7 +521,7 @@ export function Bracket({ event }: { event: Competition }) {
               <div className="registered-teams">
                 <h3>REGISTERED ENTRANTS</h3>
                 {registeredEntrants.length === 0 && <p className="roster-note">No participants have joined yet.</p>}
-                {registeredEntrants.map((entrantId) => <article className="registered-team" key={entrantId}><div><strong>{names(entrantId)}</strong></div><span className="team-status in-bracket">{registrationOpen ? "Joined bracket" : "In current bracket"}</span></article>)}
+                {registeredEntrants.map((entrantId) => <article className="registered-team" key={entrantId}><div><strong>{names(entrantId)}</strong></div><span className="team-status in-bracket">{registrationOpen ? "Signed up" : "In current bracket"}</span></article>)}
               </div>
             )}
             {event.team && <div className="registered-teams">
@@ -494,7 +530,7 @@ export function Bracket({ event }: { event: Competition }) {
               {eventTeams.map((team) => {
                 const inBracket = registeredEntrants.includes(team.id);
                 const canAdd = Boolean(bracket && !inBracket && snapshot.identity?.admin && canAddBracketEntrants(bracket));
-                return <article className="registered-team" key={team.id}><div><strong>{team.name}</strong><span>{memberNames(team) || "No members listed"}</span></div><span className={`team-status ${inBracket ? "in-bracket" : "out-bracket"}`}>{inBracket ? (registrationOpen ? "Joined bracket" : "In current bracket") : (registrationOpen ? "Open to join" : "Not in current bracket")}</span><div className="registered-team-actions">{registrationOpen && !inBracket && <Button type="button" className="primary" disabled={saving} onClick={() => void joinBracket(team.id)}>Join bracket</Button>}{snapshot.identity?.admin && <><Button type="button" onClick={() => editTeam(team)}>Edit team</Button>{canAdd && <Button type="button" className="primary" disabled={saving} onClick={() => void addBracketTeam(team.id)}>Add to bracket</Button>}</>}</div></article>;
+                return <article className="registered-team" key={team.id}><div><strong>{team.name}</strong><span>{memberNames(team) || "No members listed"}</span></div><span className={`team-status ${inBracket ? "in-bracket" : "out-bracket"}`}>{inBracket ? (registrationOpen ? "Signed up" : "In current bracket") : (registrationOpen ? "Open to join" : "Not in current bracket")}</span><div className="registered-team-actions">{registrationOpen && !inBracket && <Button type="button" className="primary" disabled={saving} onClick={() => void joinBracket(team.id)}>Sign up</Button>}{snapshot.identity?.admin && <><Button type="button" onClick={() => editTeam(team)}>Edit team</Button>{canAdd && <Button type="button" className="primary" disabled={saving} onClick={() => void addBracketTeam(team.id)}>Add to bracket</Button>}</>}</div></article>;
               })}
             </div>}
             {registrationOpen && (
@@ -503,14 +539,14 @@ export function Bracket({ event }: { event: Competition }) {
                 <p>
                   {snapshot.identity?.admin
                     ? `Add at least two ${event.team ? "teams" : "participants"}, then create the bracket.`
-                    : event.team ? "An administrator must start this bracket after teams are registered." : "Join at least two players; an administrator starts the bracket."}
+                    : event.team ? "An administrator must start this bracket after teams are registered." : "At least two players must sign up. An administrator starts the bracket."}
                 </p>
                 {event.team && !snapshot.identity?.admin && <p><Link to={withDemo("/admin")}>Administrator sign-in</Link></p>}
                 {snapshot.identity?.admin && <Button type="button" className="primary" disabled={saving || registeredEntrants.length < 2} onClick={start}>Start bracket</Button>}
               </div>
             )}
-            {bracketError && <p className="form-message" role="alert">{bracketError}</p>}
-            {rosterMessage && <p className="form-message roster-success" role="status">{rosterMessage}</p>}
+            {!signupMessages && bracketError && <p className="form-message" role="alert">{bracketError}</p>}
+            {!signupMessages && rosterMessage && <p className="form-message roster-success" role="status">{rosterMessage}</p>}
           </section>
           </details>
 

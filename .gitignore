@@ -16,3 +16,4 @@ artifacts/verification/
 docs/screenshots/
 tmp/
 .vitest/
+backups/
