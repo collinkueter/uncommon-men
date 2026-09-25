@@ -77,8 +77,6 @@ export const initialEvents: Competition[] = [
   event("pound-the-nail", "precision-accuracy", "Pound the Nail the Fastest", "duration", "lower", "seconds"),
   event("grid-based-logic-puzzle", "brain-strength", "Grid Based Logic Puzzle", "duration", "lower", "seconds", false, 0, "Timed."),
   event("sudoku", "brain-strength", "Sudoku", "duration", "lower", "seconds", false, 0, "Timed."),
-  event("chess", "strategy-tactics", "Chess", "bracket", "higher", "match"),
-  event("checkers", "strategy-tactics", "Checkers", "bracket", "higher", "match"),
   event("table-tennis", "hand-eye-coordination", "Table Tennis", "bracket", "higher", "match"),
   event("carpet-ball", "hand-eye-coordination", "Carpet Ball", "bracket", "higher", "match"),
   event("foosball", "hand-eye-coordination", "Foosball", "bracket", "higher", "match", true, 2),

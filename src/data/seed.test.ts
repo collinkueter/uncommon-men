@@ -25,8 +25,6 @@ describe("demo seed fixture", () => {
       "pound-the-nail",
       "grid-based-logic-puzzle",
       "sudoku",
-      "chess",
-      "checkers",
       "table-tennis",
       "carpet-ball",
       "foosball",

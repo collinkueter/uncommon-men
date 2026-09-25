@@ -291,7 +291,7 @@ describe("scoring", () => {
 
 describe("brackets", () => {
   it("creates and resolves a three entrant bracket with a bye", () => {
-    const bracket = createBracket("chess", ["a", "b", "c"]);
+    const bracket = createBracket("table-tennis", ["a", "b", "c"]);
     expect(bracket.matches.filter((m) => m.bye)).toHaveLength(1);
     const first = bracket.matches.find((m) => m.round === 1 && !m.bye)!;
     const next = advanceBracket(bracket, first.id, first.sideA!);
@@ -301,12 +301,12 @@ describe("brackets", () => {
     const complete = advanceBracket(next, final.id, final.sideA!);
     expect(complete.status).toBe("complete");
     expect(
-      eventStandings(state({ brackets: [complete] }), "chess")[0].points,
+      eventStandings(state({ brackets: [complete] }), "table-tennis")[0].points,
     ).toBe(10);
   });
 
   it("invalidates a completed final when a semifinal competitor changes", () => {
-    let bracket = createBracket("chess", ["a", "b", "c", "d"]);
+    let bracket = createBracket("table-tennis", ["a", "b", "c", "d"]);
     const semis = bracket.matches.filter((m) => m.round === 1);
     bracket = advanceBracket(bracket, semis[0].id, "a");
     bracket = advanceBracket(bracket, semis[1].id, "c");
@@ -319,7 +319,7 @@ describe("brackets", () => {
   });
 
   it("assigns shared elimination ranks and averaged points in an eight entrant bracket", () => {
-    let bracket = createBracket("chess", [
+    let bracket = createBracket("table-tennis", [
       "a",
       "b",
       "c",
@@ -336,7 +336,7 @@ describe("brackets", () => {
       ))
         bracket = advanceBracket(bracket, match.id, match.sideA!);
     }
-    const standings = eventStandings(state({ brackets: [bracket] }), "chess");
+    const standings = eventStandings(state({ brackets: [bracket] }), "table-tennis");
     expect(standings.map((item) => [item.rank, item.points])).toEqual([
       [1, 10],
       [2, 8],
@@ -379,7 +379,7 @@ describe("brackets", () => {
       ["a", "b", "c", "d", "e"],
       ["a", "b", "c", "d", "e", "a2", "b2", "c2"],
     ]) {
-      const bracket = createBracket("chess", entrants);
+      const bracket = createBracket("table-tennis", entrants);
       expect(bracket.status).toBe("active");
       expect(
         bracket.matches.find(
@@ -390,7 +390,7 @@ describe("brackets", () => {
   });
 
   it("handles five entrants, rejects duplicates and clears corrected descendants", () => {
-    const bracket = createBracket("checkers", ["a", "b", "c", "d", "e"]);
+    const bracket = createBracket("table-tennis", ["a", "b", "c", "d", "e"]);
     expect(bracket.matches.filter((m) => m.bye)).toHaveLength(3);
     expect(
       bracket.matches.filter((m) => m.round === 1 && !m.sideA && !m.sideB),
@@ -399,7 +399,7 @@ describe("brackets", () => {
       (m) => m.round === Math.max(...bracket.matches.map((x) => x.round)),
     )!;
     expect(() => advanceBracket(bracket, pending.id, "a")).toThrow();
-    expect(() => createBracket("checkers", ["a", "a"])).toThrow();
+    expect(() => createBracket("table-tennis", ["a", "a"])).toThrow();
     const first = bracket.matches.find((m) => m.round === 1 && !m.bye)!;
     const winner = first.sideA!;
     const changed = advanceBracket(bracket, first.id, winner);
@@ -416,7 +416,7 @@ describe("brackets", () => {
   });
 
   it("rejects a winner who is not in the match", () => {
-    const bracket = createBracket("chess", ["a", "b"]);
+    const bracket = createBracket("table-tennis", ["a", "b"]);
     expect(() => advanceBracket(bracket, bracket.matches[0].id, "z")).toThrow();
   });
 });

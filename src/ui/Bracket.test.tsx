@@ -16,14 +16,14 @@ vi.mock("./shared", () => ({
   useMediaQuery: () => false,
 }));
 
-function renderBracket(eventId = "chess") {
+function renderBracket(eventId = "table-tennis") {
   const event = context.snapshot.data.events.find((item) => item.id === eventId)!;
   return renderToStaticMarkup(<MemoryRouter><Bracket event={event} /></MemoryRouter>);
 }
 
 beforeEach(() => {
   const data = createSeedState();
-  data.brackets = [createBracket("chess", data.participants.slice(0, 3).map((p) => p.id))];
+  data.brackets = [createBracket("table-tennis", data.participants.slice(0, 3).map((p) => p.id))];
   context.snapshot = { data, identity: { uid: "test", name: "Test", admin: false }, loading: false, identityLoading: false, error: null, mode: "demo", connected: true };
 });
 

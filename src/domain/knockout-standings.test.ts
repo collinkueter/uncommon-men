@@ -91,9 +91,9 @@ describe("knockout standings", () => {
   });
 
   it("leaves bracket scoring unchanged", () => {
-    let bracket = createBracket("chess", ["a", "b"]);
+    let bracket = createBracket("table-tennis", ["a", "b"]);
     const match = bracket.matches[0];
     bracket = advanceBracket(bracket, match.id, "a");
-    expect(eventStandings({ ...state(), brackets: [bracket] }, "chess")[0]).toMatchObject({ id: "a", points: 10 });
+    expect(eventStandings({ ...state(), brackets: [bracket] }, "table-tennis")[0]).toMatchObject({ id: "a", points: 10 });
   });
 });
