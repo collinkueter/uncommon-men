@@ -316,7 +316,7 @@ export function Bracket({ event }: { event: Competition }) {
             <p className="event-instructions">{event.instructions}</p>
           )}
           <p className="event-instructions">
-            {event.team ? "Team championship · Separate from individual points" : "Individual championship · Counts toward category and overall points"}
+            {event.team ? "Team championship · Separate from individual points" : "Individual championship · Counts toward overall points"}
           </p>
         </header>
         <div className={`bracket-play ${!bracket ? "bracket-not-started" : ""}`}>

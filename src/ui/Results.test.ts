@@ -6,10 +6,10 @@ import { getAttemptsForEventParticipant } from "./AttemptList";
 describe("results counting marker", () => {
   it("marks only the exact best valid attempt, including ties", () => {
     const state = createSeedState();
-    const best = state.attempts.find((attempt) => attempt.eventId === "dumbbell-hold-10-lb" && attempt.participantId === "demo-p1")!;
+    const best = state.attempts.find((attempt) => attempt.eventId === "dumbbell-hold-15-lb" && attempt.participantId === "demo-p1")!;
     state.attempts.push({ ...best, id: "earlier-dumbbell", value: 40, createdAt: best.createdAt - 1 });
     const attempts = state.attempts.filter(
-      (attempt) => attempt.eventId === "dumbbell-hold-10-lb" && attempt.participantId === "demo-p1",
+      (attempt) => attempt.eventId === "dumbbell-hold-15-lb" && attempt.participantId === "demo-p1",
     ).sort((a, b) => a.value - b.value);
     expect(isCountingAttempt(state, attempts[0])).toBe(false);
     expect(isCountingAttempt(state, attempts[1])).toBe(true);
@@ -35,25 +35,25 @@ describe("results counting marker", () => {
 
   it("filters inline history by both event and participant", () => {
     const state = createSeedState();
-    const best = state.attempts.find((attempt) => attempt.eventId === "dumbbell-hold-10-lb" && attempt.participantId === "demo-p1")!;
+    const best = state.attempts.find((attempt) => attempt.eventId === "dumbbell-hold-15-lb" && attempt.participantId === "demo-p1")!;
     state.attempts.push({ ...best, id: "earlier-dumbbell", value: 40, createdAt: best.createdAt - 1 });
     const attempts = getAttemptsForEventParticipant(
       state,
-      "dumbbell-hold-10-lb",
+      "dumbbell-hold-15-lb",
       "demo-p1",
       "Caleb Johnson",
     );
     expect(attempts.length).toBeGreaterThan(0);
     expect(attempts.every((attempt) =>
-      attempt.eventId === "dumbbell-hold-10-lb" && attempt.participantId === "demo-p1",
+      attempt.eventId === "dumbbell-hold-15-lb" && attempt.participantId === "demo-p1",
     )).toBe(true);
     expect(attempts[0].createdAt).toBeGreaterThanOrEqual(attempts[1].createdAt);
   });
 
   it("uses exact normalized names and does not show another competitor history", () => {
     const state = createSeedState();
-    const exact = getAttemptsForEventParticipant(state, "dumbbell-hold-10-lb", undefined, " caleb   johnson ");
-    const changed = getAttemptsForEventParticipant(state, "dumbbell-hold-10-lb", undefined, "Caleb Johnson Jr");
+    const exact = getAttemptsForEventParticipant(state, "dumbbell-hold-15-lb", undefined, " caleb   johnson ");
+    const changed = getAttemptsForEventParticipant(state, "dumbbell-hold-15-lb", undefined, "Caleb Johnson Jr");
     expect(exact.length).toBeGreaterThan(0);
     expect(changed).toEqual([]);
   });

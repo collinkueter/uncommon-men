@@ -4,7 +4,6 @@ import {
   CalendarDays,
   Clock3,
   FileText,
-  ListFilter,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -13,7 +12,6 @@ import { formatScore } from "@/domain/ranking";
 import type {
   AppSnapshot,
   Attempt,
-  Category,
   Competition,
   ConferenceStore,
 } from "@/domain/types";
@@ -189,19 +187,6 @@ function AdminEvents({
           />
         </label>
         <div className="admin-field">
-          <label htmlFor="admin-event-category">Category</label>
-          <ThemedSelect
-            id="admin-event-category"
-            label="Category"
-            value={draft.categoryId}
-            onChange={(value) => update("categoryId", value)}
-            options={snapshot.data.categories.map((c) => ({
-              value: c.id,
-              label: c.name,
-            }))}
-          />
-        </div>
-        <div className="admin-field">
           <label htmlFor="admin-event-scoring">Scoring</label>
           <ThemedSelect
             id="admin-event-scoring"
@@ -301,115 +286,10 @@ function AdminEvents({
     </>
   );
 }
-function AdminCategories({
-  snapshot,
-  execute,
-}: {
-  snapshot: AppSnapshot;
-  execute: ConferenceStore["execute"];
-}) {
-  const [draft, setDraft] = useState<Category>({
-    id: nowId(),
-    name: "",
-    group: "physical",
-    order: snapshot.data.categories.length,
-  });
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const save = async () => {
-    if (saving || !draft.name.trim()) return;
-    setSaving(true);
-    setError("");
-    try {
-      await execute({
-        type: "saveCategory",
-        category: {
-          ...draft,
-          name: draft.name.trim(),
-          order: Number(draft.order),
-        },
-        reason: "Administrator category update",
-      });
-      setDraft({
-        id: nowId(),
-        name: "",
-        group: "physical",
-        order: snapshot.data.categories.length,
-      });
-    } catch {
-      setError("Could not save the category.");
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <>
-      <h1>CATEGORY EDITOR</h1>
-      <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <div className="admin-grid">
-        <label>
-          Name
-          <input
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          />
-        </label>
-        <div className="admin-field">
-          <label htmlFor="admin-category-group">Group</label>
-          <ThemedSelect
-            id="admin-category-group"
-            label="Group"
-            value={draft.group}
-            onChange={(value) =>
-              setDraft({
-                ...draft,
-                group: value as "physical" | "mental",
-              })
-            }
-            options={[
-              { value: "physical", label: "Physical" },
-              { value: "mental", label: "Mental" },
-            ]}
-          />
-        </div>
-        <label>
-          Display order
-          <input
-            type="number"
-            value={draft.order}
-            onChange={(e) =>
-              setDraft({ ...draft, order: Number(e.target.value) })
-            }
-          />
-        </label>
-        </div>
-        <Button type="submit" className="primary" disabled={saving || !draft.name.trim()}>
-        {snapshot.data.categories.some((c) => c.id === draft.id)
-          ? "Save category"
-          : "Create category"}
-        </Button>
-      </form>
-      {error && <p className="form-message">{error}</p>}
-      <div className="edit-list">
-        {snapshot.data.categories.map((c) => (
-          <article key={c.id}>
-            <div>
-              <strong>{c.name}</strong>
-              <small>
-                {c.group} · #{c.order}
-              </small>
-            </div>
-            <Button type="button" onClick={() => setDraft(c)}>Edit</Button>
-          </article>
-        ))}
-      </div>
-    </>
-  );
-}
 export function Admin() {
   const { snapshot, execute, signInAdmin, signOutAdmin } = useConference();
   const [tab, setTab] = useState<
-    "results" | "participants" | "events" | "categories" | "audit"
+    "results" | "participants" | "events" | "audit"
   >("results");
   const [selected, setSelected] = useState<Attempt | undefined>();
   const [value, setValue] = useState("");
@@ -495,7 +375,6 @@ export function Admin() {
               "results",
               "participants",
               "events",
-              "categories",
               "audit",
             ] as const
           ).map((t) => (
@@ -511,8 +390,6 @@ export function Admin() {
                 <Users />
               ) : t === "events" ? (
                 <CalendarDays />
-              ) : t === "categories" ? (
-                <ListFilter />
               ) : (
                 <Clock3 />
               )}
@@ -617,9 +494,6 @@ export function Admin() {
           )}
           {tab === "events" && (
             <AdminEvents snapshot={snapshot} execute={execute} />
-          )}
-          {tab === "categories" && (
-            <AdminCategories snapshot={snapshot} execute={execute} />
           )}
           {tab === "audit" && (
             <>

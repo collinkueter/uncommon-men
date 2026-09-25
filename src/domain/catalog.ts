@@ -43,7 +43,7 @@ const event = (
 });
 
 export const initialEvents: Competition[] = [
-  event("dumbbell-hold-10-lb", "brute-strength", "Dumbbell Hold - 10 lb", "duration", "higher", "seconds"),
+  event("dumbbell-hold-15-lb", "brute-strength", "Dumbbell Hold - 15 lb", "duration", "higher", "seconds"),
   event("dumbbell-hold-20-lb", "brute-strength", "Dumbbell Hold - 20 lb", "duration", "higher", "seconds"),
   event("push-up", "brute-strength", "Push Up", "count", "higher", "reps"),
   event("plank-holds", "endurance", "Plank Holds", "duration", "higher", "seconds"),

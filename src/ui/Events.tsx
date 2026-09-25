@@ -8,23 +8,15 @@ import {
   Trophy,
 } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
-import { categoriesWithActiveEvents } from "@/domain/catalog";
 import { BottomNav, Empty, PageShell, withDemo, scoreLabel } from "./shared";
-import { ThemedSelect } from "./ThemedSelect";
 
 export function Events() {
   const { snapshot } = useConference();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
   const activeEvents = snapshot.data.events.filter((event) => event.active);
   const events = activeEvents.filter(
-    (event) =>
-      (category === "all" || event.categoryId === category) &&
-      event.name.toLowerCase().includes(search.toLowerCase()),
+    (event) => event.name.toLowerCase().includes(search.toLowerCase()),
   );
-  const categories = categoriesWithActiveEvents(snapshot.data.categories, snapshot.data.events);
-  const cat = (id: string) =>
-    snapshot.data.categories.find((x) => x.id === id)?.name ?? "Competition";
   return (
     <PageShell>
       <section className="content event-list">
@@ -43,15 +35,6 @@ export function Events() {
               aria-label="Find an event"
             />
           </label>
-          <ThemedSelect
-            label="Filter by category"
-            value={category}
-            onChange={setCategory}
-            options={[
-              { value: "all", label: "All categories" },
-              ...categories.map((c) => ({ value: c.id, label: c.name })),
-            ]}
-          />
         </div>
         {events.length ? (
           <div className="events-grid">
@@ -72,7 +55,6 @@ export function Events() {
                 </span>
                 <span>
                   <strong>{event.name}</strong>
-                  <small>{cat(event.categoryId)}</small>
                 </span>
                 <b>{scoreLabel(event)}</b>
                 <ChevronRight />

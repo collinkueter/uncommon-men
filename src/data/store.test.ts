@@ -32,7 +32,7 @@ describe("demo state migration", () => {
 
   it("shifts recognizable fixture dates while preserving cached user edits", () => {
     const state = createSeedState();
-    const fixture = state.attempts.find((attempt) => attempt.id === "demo-attempt-dumbbell-hold-10-lb-demo-p1-1")!;
+    const fixture = state.attempts.find((attempt) => attempt.id === "demo-attempt-dumbbell-hold-15-lb-demo-p1-1")!;
     fixture.createdAt = legacyRecordedAt + 60;
     fixture.updatedAt = Date.parse("2026-09-22T14:00:00Z");
     fixture.value = 77;
@@ -46,7 +46,7 @@ describe("demo state migration", () => {
     };
     state.attempts.push(userAdded);
     state.audit.push({
-      id: "demo-audit-dumbbell-hold-10-lb-correction",
+      id: "demo-audit-dumbbell-hold-15-lb-correction",
       action: "correctAttempt",
       entityType: "attempt",
       entityId: fixture.id,

@@ -94,7 +94,7 @@ const attemptsFor = (eventId: string, values: number[], offset: number) =>
     makeAttempt(eventId, name, values[index], offset + index),
   );
 const numericAttempts: Attempt[] = [
-  ...attemptsFor("dumbbell-hold-10-lb", [62.4, 58.1, 54.7, 51.2, 48.6, 45.3, 42.8, 39.9], 1),
+  ...attemptsFor("dumbbell-hold-15-lb", [62.4, 58.1, 54.7, 51.2, 48.6, 45.3, 42.8, 39.9], 1),
   ...attemptsFor("dumbbell-hold-20-lb", [44.8, 41.2, 38.5, 35.9, 33.6, 30.7, 28.4, 25.1], 10),
   ...attemptsFor("push-up", [52, 49, 46, 43, 40, 37, 34, 31], 10),
   ...attemptsFor(

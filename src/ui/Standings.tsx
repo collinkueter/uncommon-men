@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, Trophy } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
-import { categoriesWithActiveEvents } from "@/domain/catalog";
-import { categoryStandings, eventStandings, formatScore, overallStandings } from "@/domain/ranking";
+import { eventStandings, formatScore, overallStandings } from "@/domain/ranking";
 import type { Competition, Standing } from "@/domain/types";
 import { Brand, Button, Empty, PageShell, scoreLabel } from "./shared";
 import { ThemedSelect } from "./ThemedSelect";
 
-type Mode = "overall" | "categories" | "events" | "teams";
+type Mode = "overall" | "events" | "teams";
 type DisplayRow = Standing & { result?: string };
-const modes: Mode[] = ["overall", "categories", "events", "teams"];
+const modes: Mode[] = ["overall", "events", "teams"];
 
 export function Standings() {
   const { snapshot } = useConference();
@@ -35,10 +34,9 @@ export function Standings() {
       } else {
         rows = rows.map(row => ({ ...row, result: event.kind === "bracket" ? row.rank === 1 ? "Champion" : `Place ${row.rank}` : `${formatScore(row.value, event)}${event.kind === "duration" ? "" : ` ${event.unit}`}` }));
       }
-      return { id: event.id, title: event.name, subtitle: state.categories.find(c => c.id === event.categoryId)?.name ?? "Competition", detail: event.kind === "bracket" ? `${event.team ? "Team championship · " : ""}${bracket?.status === "complete" ? "Final results" : "Single elimination · In progress"}` : scoreLabel(event), rows };
+      return { id: event.id, title: event.name, subtitle: "Competition", detail: event.kind === "bracket" ? `${event.team ? "Team championship · " : ""}${bracket?.status === "complete" ? "Final results" : "Single elimination · In progress"}` : scoreLabel(event), rows };
     };
     if (mode === "events" || mode === "teams") return state.events.filter(e => e.active && e.team === (mode === "teams")).map(eventGroup);
-    if (mode === "categories") return categoriesWithActiveEvents(state.categories, state.events).map(c => ({id: c.id, title: c.name, subtitle: "Category standings", detail: "Every individual event counts", rows: categoryStandings(state, c.id) as DisplayRow[]}));
     return [{id: "overall", title: "Overall standings", subtitle: "Conference champion", detail: "Every individual event · Equal weight", rows: overallStandings(state) as DisplayRow[]}];
   }, [snapshot.data, mode]);
   const slides = useMemo(() => groups.flatMap(group => {

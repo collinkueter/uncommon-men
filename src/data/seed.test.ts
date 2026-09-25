@@ -14,7 +14,7 @@ describe("demo seed fixture", () => {
       initialEvents.map((event) => event.id),
     );
     expect(state.events.map((event) => event.id)).toEqual([
-      "dumbbell-hold-10-lb",
+      "dumbbell-hold-15-lb",
       "dumbbell-hold-20-lb",
       "push-up",
       "plank-holds",
@@ -52,7 +52,7 @@ describe("demo seed fixture", () => {
   it("contains representative leaderboard data and live cornhole semifinal fixture", () => {
     const state = createSeedState();
     const dumbbellHold = state.attempts
-      .filter((attempt) => attempt.eventId === "dumbbell-hold-10-lb" && attempt.valid)
+      .filter((attempt) => attempt.eventId === "dumbbell-hold-15-lb" && attempt.valid)
       .sort((a, b) => b.value - a.value);
     expect(
       state.participants.find(

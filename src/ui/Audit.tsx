@@ -36,8 +36,6 @@ const json = (value: unknown) => {
 const entityName = (state: ConferenceState, entityType: string, id: string) => {
   if (entityType === "events" || entityType === "event")
     return state.events.find((item) => item.id === id)?.name ?? id;
-  if (entityType === "categories" || entityType === "category")
-    return state.categories.find((item) => item.id === id)?.name ?? id;
   if (entityType === "participants" || entityType === "participant")
     return state.participants.find((item) => item.id === id)?.name ?? id;
   if (entityType === "teams" || entityType === "team")
@@ -125,8 +123,6 @@ export function describeAuditEntry(entry: AuditEntry, state: ConferenceState): s
       return `Participant renamed: ${text(before?.name, entry.entityId)} → ${text(after?.name)}`;
     case "saveEvent":
       return `Event ${text(after?.name, entityName(state, entry.entityType, entry.entityId))} saved`;
-    case "saveCategory":
-      return `Category ${text(after?.name, entityName(state, entry.entityType, entry.entityId))} saved`;
     case "saveTeam":
       return `Team ${text(after?.name, entityName(state, entry.entityType, entry.entityId))} saved${event ? ` for ${event.name}` : ""}`;
     case "addBracketTeam":

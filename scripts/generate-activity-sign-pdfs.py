@@ -112,7 +112,7 @@ def draw_lines(
     return baseline + leading
 
 
-def draw_header(pdf: canvas.Canvas, category: str) -> None:
+def draw_header(pdf: canvas.Canvas) -> None:
     top_height = 86.4
     pdf.setFillColor(INK)
     pdf.rect(0, HEIGHT - top_height, WIDTH, top_height, fill=1, stroke=0)
@@ -144,12 +144,7 @@ def draw_header(pdf: canvas.Canvas, category: str) -> None:
 
     pdf.setFillColor(HexColor("#e7ecd9"))
     pdf.setFont("Barlow600", 9.5)
-    pdf.drawRightString(570, HEIGHT - 40, "ACTIVITY GUIDE")
-    category_lines = wrapped(category.upper(), "Barlow700", 11, 215)
-    pdf.setFillColor(BRIGHT_LIME)
-    pdf.setFont("Barlow700", 11)
-    for line_number, line in enumerate(category_lines):
-        pdf.drawRightString(570, HEIGHT - 57 - 13 * line_number, line)
+    pdf.drawRightString(570, HEIGHT - 48, "EVENT GUIDE")
 
 
 def draw_qr(pdf: canvas.Canvas, event_id: str, activity_url: str) -> None:
@@ -176,10 +171,10 @@ def render_one(activity: dict, index: int, total: int, website: str) -> Path:
     pdf = canvas.Canvas(str(destination), pagesize=letter, pageCompression=1)
     pdf.setTitle(f"Uncommon Men - {activity['name']}")
     pdf.setAuthor("Uncommon Men")
-    pdf.setSubject("Activity guide and scoring link")
+    pdf.setSubject("Event guide and scoring link")
     pdf.setFillColor(PAPER)
     pdf.rect(0, 0, WIDTH, HEIGHT, fill=1, stroke=0)
-    draw_header(pdf, activity["category"])
+    draw_header(pdf)
 
     left, body_width = 42, 528
     y = HEIGHT - 86.4 - 36
@@ -230,7 +225,7 @@ def render_one(activity: dict, index: int, total: int, website: str) -> Path:
     pdf.drawString(format_x, format_y, activity["format"])
     info_bottom = format_y
     if activity.get("timed"):
-        timing = "No stopwatch or timer? Use the built-in stopwatch on this activity's app page."
+        timing = "No stopwatch or timer? Use the built-in stopwatch on this event's app page."
         timing_lines = wrapped(timing, "Barlow600", 14, body_width)
         info_bottom = draw_lines(
             pdf,
@@ -252,8 +247,8 @@ def render_one(activity: dict, index: int, total: int, website: str) -> Path:
     pdf.rect(left, cta_y + cta_height - 3, body_width, 3, fill=1, stroke=0)
     pdf.setFillColor(BRIGHT_LIME)
     pdf.setFont("BarlowCondensed900", 25)
-    pdf.drawString(left + 18, cta_y + 112, "OPEN THIS ACTIVITY")
-    cta_description = "The QR opens this activity directly. Or type the URL and choose it from the list."
+    pdf.drawString(left + 18, cta_y + 112, "OPEN THIS EVENT")
+    cta_description = "The QR opens this event directly. Or type the URL and choose it from the list."
     draw_lines(
         pdf,
         wrapped(cta_description, "Barlow400", 13, 350),

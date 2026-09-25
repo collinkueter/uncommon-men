@@ -140,7 +140,7 @@ describe("scoring", () => {
         .slice(0, 2)
         .map((p, i) => ({
           id: `p${i}`,
-          eventId: "dumbbell-hold-10-lb",
+          eventId: "dumbbell-hold-15-lb",
           participantId: p.id,
           value: 10 - i,
           valid: true,
