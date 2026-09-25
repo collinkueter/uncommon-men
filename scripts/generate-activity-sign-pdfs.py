@@ -6,6 +6,7 @@ Run with the Codex PDF runtime after installing fonttools, brotli, and svglib.
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 from pathlib import Path
@@ -56,8 +57,8 @@ process.stdout.write(JSON.stringify(context.signData));
         text=True,
     )
     data = json.loads(result.stdout)
-    if len(data["activities"]) != 15:
-        raise ValueError("Expected exactly 15 approved activities")
+    if not data["activities"] or len({item["id"] for item in data["activities"]}) != len(data["activities"]):
+        raise ValueError("Expected a nonempty list of activities with unique IDs")
     return data["website"], data["activities"]
 
 
@@ -279,10 +280,17 @@ def render_one(activity: dict, index: int, total: int, website: str) -> Path:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--event", help="Render only the event with this ID")
+    args = parser.parse_args()
     website, activities = read_activities()
+    if args.event and not any(activity["id"] == args.event for activity in activities):
+        parser.error("Unknown event ID: " + args.event)
     register_fonts()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for index, activity in enumerate(activities, start=1):
+        if args.event and activity["id"] != args.event:
+            continue
         path = render_one(activity, index, len(activities), website)
         print(path)
 

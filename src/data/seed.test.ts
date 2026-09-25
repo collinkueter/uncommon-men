@@ -6,7 +6,7 @@ describe("demo seed fixture", () => {
   it("covers the complete catalog and coherent entity references", () => {
     const state = createSeedState();
     expect(state.categories).toHaveLength(6);
-    expect(state.events).toHaveLength(15);
+    expect(state.events).toHaveLength(initialEvents.length);
     expect(state.categories.map((category) => category.id)).toEqual(
       initialCategories.map((category) => category.id),
     );
@@ -17,6 +17,7 @@ describe("demo seed fixture", () => {
       "dumbbell-hold-15-lb",
       "dumbbell-hold-20-lb",
       "push-up",
+      "single-arm-bicep-curl-20-lb",
       "plank-holds",
       "cornhole",
       "basketball-free-throws",
