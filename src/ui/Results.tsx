@@ -1,7 +1,7 @@
 import { useConference } from "@/lib/ConferenceContext";
 import { getBestAttempt } from "@/domain/ranking";
 import type { Attempt, ConferenceState } from "@/domain/types";
-import { AttemptList } from "./AttemptList";
+import { AttemptList, participantIdForName } from "./AttemptList";
 import { BottomNav, PageShell, RequireIdentity } from "./shared";
 import "./Results.css";
 
@@ -17,7 +17,11 @@ export function isCountingAttempt(
 
 export function Results() {
   const { snapshot } = useConference();
-  const participantId = snapshot.identity?.participantId;
+  // A device that lost its sign-in session gets a new identity without a
+  // participant link; fall back to the remembered name so history still shows.
+  const participantId =
+    snapshot.identity?.participantId ??
+    participantIdForName(snapshot.data, snapshot.identity?.name ?? "");
   const attempts = snapshot.data.attempts
     .filter((a) => a.participantId === participantId)
     .sort((a, b) => b.createdAt - a.createdAt);

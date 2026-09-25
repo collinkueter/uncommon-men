@@ -114,8 +114,6 @@ export function PageShell({
 }
 export function Status() {
   const { snapshot, clearError } = useConference();
-  if (snapshot.loading)
-    return <div className="notice" role="status">Loading competition data…</div>;
   if (snapshot.error)
     return (
       <div className="notice error" role="alert">
@@ -125,6 +123,8 @@ export function Status() {
         </button>
       </div>
     );
+  if (snapshot.loading)
+    return <div className="notice" role="status">Loading competition data…</div>;
   if (snapshot.mode === "demo")
     return (
       <div className="notice demo" role="status">DEMO MODE · Sample competition data</div>
@@ -183,7 +183,7 @@ export function formatDuration(value: number) {
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`;
 }
 export function parseDuration(v: string) {
-  const bits = v.trim().split(":");
+  const bits = v.trim().replace(",", ".").split(":");
   if (bits.length === 2) {
     const seconds = Number(bits[1]);
     const minutes = Number(bits[0]);
@@ -194,7 +194,7 @@ export function parseDuration(v: string) {
       ? minutes * 60 + seconds
       : NaN;
   }
-  const n = Number(v);
+  const n = bits.length === 1 ? Number(bits[0]) : NaN;
   return n > 0 ? n : NaN;
 }
 

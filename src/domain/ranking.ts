@@ -18,23 +18,46 @@ export function normalizeName(name: string): string {
     .replace(/\s+/g, " ");
 }
 
+// Best valid attempt per event and competitor, built in one pass and cached per
+// attempts/events array so standings stay cheap as results accumulate.
+const bestIndexCache = new WeakMap<
+  Attempt[],
+  WeakMap<Competition[], Map<string, Attempt>>
+>();
+function bestAttemptIndex(state: ConferenceState): Map<string, Attempt> {
+  let byEvents = bestIndexCache.get(state.attempts);
+  if (!byEvents) {
+    byEvents = new WeakMap();
+    bestIndexCache.set(state.attempts, byEvents);
+  }
+  let index = byEvents.get(state.events);
+  if (index) return index;
+  const lower = new Set(
+    state.events.filter((event) => event.direction === "lower").map((event) => event.id),
+  );
+  index = new Map();
+  for (const attempt of state.attempts) {
+    if (!attempt.valid || !Number.isFinite(attempt.value)) continue;
+    const key = `${attempt.eventId}\u0000${attempt.participantId}`;
+    const current = index.get(key);
+    if (
+      !current ||
+      (lower.has(attempt.eventId)
+        ? attempt.value < current.value
+        : attempt.value > current.value)
+    )
+      index.set(key, attempt);
+  }
+  byEvents.set(state.events, index);
+  return index;
+}
+
 export function getBestAttempt(
   state: ConferenceState,
   eventId: string,
   participantId: string,
 ): Attempt | undefined {
-  const event = state.events.find((item) => item.id === eventId);
-  return state.attempts
-    .filter(
-      (a) =>
-        a.eventId === eventId &&
-        a.participantId === participantId &&
-        a.valid &&
-        Number.isFinite(a.value),
-    )
-    .sort((a, b) =>
-      event?.direction === "lower" ? a.value - b.value : b.value - a.value,
-    )[0];
+  return bestAttemptIndex(state).get(`${eventId}\u0000${participantId}`);
 }
 
 function pointsForRanks(ranks: number[]): number[] {

@@ -552,6 +552,9 @@ class FirebaseStore extends BaseStore {
   private auditUnsubscribe?: Unsubscribe;
   private identityUnsubscribe?: Unsubscribe;
   private authRevision = 0;
+  private authRetryTimer?: ReturnType<typeof setTimeout>;
+  private authRetryDelay = 0;
+  private authErrorMessage: string | null = null;
   private catalogReady = new Map<"categories" | "events", boolean>();
   private online = () => {
     this.snapshot = { ...this.snapshot, connected: true };
@@ -623,6 +626,14 @@ class FirebaseStore extends BaseStore {
             collection(this.db, name),
             { includeMetadataChanges: true },
             (result) => {
+              const nextConnected =
+                this.snapshot.connected || !result.metadata.fromCache;
+              if (
+                this.loaded.has(name) &&
+                result.docChanges().length === 0 &&
+                nextConnected === this.snapshot.connected
+              )
+                return;
               let values = result.docs.map((item) =>
                 fromFirestore(item.id, item.data()),
               );
@@ -659,8 +670,7 @@ class FirebaseStore extends BaseStore {
                       this.snapshot.error === CATALOG_SETUP_ERROR
                     ? null
                     : this.snapshot.error,
-                connected:
-                  this.snapshot.connected || !result.metadata.fromCache,
+                connected: nextConnected,
               };
               this.emit();
             },
@@ -671,8 +681,38 @@ class FirebaseStore extends BaseStore {
       this.fail(error);
     }
   }
+  // Sign-in failures (for example the per-IP anonymous sign-up limit on shared
+  // conference Wi-Fi) must never leave the app stuck loading. Public data stays
+  // readable, the error is shown, and sign-in is retried with backoff.
+  private scheduleAuthRetry(revision: number, user: User | null) {
+    this.authErrorMessage = this.snapshot.error;
+    this.loaded.add("audit");
+    if (this.snapshot.loading && this.loaded.size >= collections.length) {
+      this.snapshot = { ...this.snapshot, loading: false };
+      this.emit();
+    }
+    clearTimeout(this.authRetryTimer);
+    this.authRetryDelay = Math.min(
+      this.authRetryDelay ? this.authRetryDelay * 2 : 3000,
+      60000,
+    );
+    this.authRetryTimer = setTimeout(() => {
+      if (revision !== this.authRevision) return;
+      void this.handleUser(user ?? this.auth?.currentUser ?? null);
+    }, this.authRetryDelay);
+  }
+  private clearAuthError() {
+    this.authRetryDelay = 0;
+    clearTimeout(this.authRetryTimer);
+    if (this.authErrorMessage && this.snapshot.error === this.authErrorMessage) {
+      this.snapshot = { ...this.snapshot, error: null };
+      this.emit();
+    }
+    this.authErrorMessage = null;
+  }
   private async handleUser(user: User | null) {
     const revision = ++this.authRevision;
+    clearTimeout(this.authRetryTimer);
     this.auditUnsubscribe?.();
     this.auditUnsubscribe = undefined;
     this.identityUnsubscribe?.();
@@ -688,11 +728,12 @@ class FirebaseStore extends BaseStore {
         await signInAnonymously(this.auth!);
       } catch (error) {
         this.fail(error);
+        this.scheduleAuthRetry(revision, null);
       }
       return;
     }
     try {
-      const token = await getIdTokenResult(user, true);
+      const token = await getIdTokenResult(user);
       if (revision !== this.authRevision) return;
       const remembered = readRememberedIdentity();
       const identityRef = doc(this.db!, "identities", user.uid);
@@ -780,8 +821,10 @@ class FirebaseStore extends BaseStore {
         loading: this.loaded.size < collections.length,
       };
       this.emit();
+      this.clearAuthError();
     } catch (error) {
       this.fail(error);
+      if (revision === this.authRevision) this.scheduleAuthRetry(revision, user);
     }
   }
   private requireReady() {
@@ -883,7 +926,7 @@ class FirebaseStore extends BaseStore {
         const requestRef = doc(db, "attempts", command.requestId);
         const auditRef = doc(db, "audit", randomId());
         let linkedParticipantId: string | undefined;
-        await runTransaction(db, async (transaction) => {
+        await retryOnRace(() => runTransaction(db, async (transaction) => {
           if ((await transaction.get(requestRef)).exists()) return;
           const identityRef = doc(db, "identities", actor.uid);
           const identitySnapshot = actor.participantId
@@ -986,7 +1029,7 @@ class FirebaseStore extends BaseStore {
             });
             linkedParticipantId = participant.id;
           }
-        });
+        }));
         if (linkedParticipantId) {
           const identity = { ...actor, participantId: linkedParticipantId };
           rememberIdentity(identity);
@@ -1206,7 +1249,7 @@ class FirebaseStore extends BaseStore {
         return;
       }
       if (command.type === "matchWinner") {
-        await this.auditedWrite(
+        await retryOnRace(() => this.auditedWrite(
           `brackets/${command.bracketId}`,
           "matchWinner",
           command.reason || "Winner selected",
@@ -1219,13 +1262,17 @@ class FirebaseStore extends BaseStore {
               (match) => match.id === command.matchId,
             );
             if (lastMatchIndex < 0) throw new Error("Match not found.");
-            if (
-              bracket.matches[lastMatchIndex].winnerId &&
-              !this.snapshot.identity?.admin
-            )
+            const existingWinner = bracket.matches[lastMatchIndex].winnerId;
+            // Scorekeepers on different matches of the same bracket must not
+            // conflict, so only corrections of a decided match need the exact
+            // revision the admin was looking at.
+            if (existingWinner === command.winnerId) throw new AlreadyRecorded();
+            if (existingWinner && !this.snapshot.identity?.admin)
               throw new Error(
-                "Administrator access is required to correct a winner.",
+                "Another scorekeeper already recorded this match. Ask an administrator to correct it.",
               );
+            if (existingWinner && bracket.revision !== command.revision)
+              throw new Error("This bracket changed. Refresh and try again.");
             const parent = bracket.matches.find(
               (match) =>
                 match.round === bracket.matches[lastMatchIndex].round + 1 &&
@@ -1243,8 +1290,9 @@ class FirebaseStore extends BaseStore {
             const { id: _, ...stored } = after;
             return { ...stored, lastMatchIndex, lastParentIndex };
           },
-          command.revision,
-        );
+        )).catch((error) => {
+          if (!(error instanceof AlreadyRecorded)) throw error;
+        });
       }
     } catch (error) {
       this.fail(error);
@@ -1273,6 +1321,7 @@ class FirebaseStore extends BaseStore {
     await signOut(this.auth);
   }
   dispose() {
+    clearTimeout(this.authRetryTimer);
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
     this.auditUnsubscribe?.();
     this.identityUnsubscribe?.();
@@ -1280,6 +1329,33 @@ class FirebaseStore extends BaseStore {
     window.removeEventListener("offline", this.offline);
     this.unsubscribers = [];
     this.listeners.clear();
+  }
+}
+
+class AlreadyRecorded extends Error {}
+
+// When two devices commit to the same document at the same instant (two
+// scorekeepers on one bracket, or two stations creating the same new
+// competitor), the losing commit is validated against the winner's data and
+// rejected as permission-denied instead of a retryable conflict. Re-running the
+// transaction reads the fresh document and succeeds.
+async function retryOnRace<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const code = error instanceof FirebaseError ? error.code : "";
+      if (
+        attempt >= 2 ||
+        !["permission-denied", "aborted", "failed-precondition"].some((suffix) =>
+          code.endsWith(suffix),
+        )
+      )
+        throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, 150 + Math.random() * 350),
+      );
+    }
   }
 }
 
@@ -1294,6 +1370,22 @@ async function participantDocumentId(value: string): Promise<string> {
 }
 
 function friendlyFirebaseError(error: FirebaseError): string {
+  if (
+    [
+      "auth/too-many-requests",
+      "auth/network-request-failed",
+      "auth/internal-error",
+      "auth/quota-exceeded",
+      "auth/admin-restricted-operation",
+    ].includes(error.code)
+  )
+    return "Connecting your device is taking longer than usual. Standings stay live; recording will be ready shortly. Retrying automatically…";
+  if (error.code === "auth/popup-closed-by-user" || error.code === "auth/cancelled-popup-request")
+    return "Google sign-in was closed before it finished.";
+  if (error.code === "auth/popup-blocked")
+    return "Your browser blocked the Google sign-in window. Allow pop-ups and try again.";
+  if (error.code.endsWith("resource-exhausted"))
+    return "The live conference service is at capacity. Try again in a moment.";
   if (error.code.endsWith("permission-denied"))
     return "This action is not allowed for the current account. Refresh and try again, or ask an administrator for access.";
   if (error.code.endsWith("unavailable"))

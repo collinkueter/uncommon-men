@@ -96,14 +96,17 @@ function ScoreForm({ event }: { event: Competition }) {
   const competitorInput = useRef<HTMLInputElement>(null);
   const competitorId = `competitor-${event.id}`;
   const manualValueId = `manual-value-${event.id}`;
-  const matches = snapshot.data.participants
-    .filter(
-      (p) =>
-        normalizeName(name) &&
-        normalizeName(p.name).includes(normalizeName(name)) &&
-        normalizeName(p.name) !== normalizeName(name),
-    )
-    .slice(0, 4);
+  const participants = snapshot.data.participants;
+  const matches = useMemo(() => {
+    const query = normalizeName(name);
+    if (!query) return [];
+    return participants
+      .filter((p) => {
+        const candidate = p.normalizedName || normalizeName(p.name);
+        return candidate.includes(query) && candidate !== query;
+      })
+      .slice(0, 4);
+  }, [participants, name]);
   useEffect(() => {
     if (!running || !startedAt) return;
     const id = window.setInterval(
@@ -112,6 +115,8 @@ function ScoreForm({ event }: { event: Competition }) {
     );
     return () => clearInterval(id);
   }, [running, startedAt]);
+  // While running, startedAt restores the timer, so skip per-tick storage writes.
+  const persistedElapsed = running ? null : elapsed;
   useEffect(() => {
     sessionStorage.setItem(
       timerKey,
@@ -124,23 +129,31 @@ function ScoreForm({ event }: { event: Competition }) {
         recorderName: snapshot.identity?.name,
       }),
     );
-  }, [elapsed, running, startedAt, timerKey, name, participantId, snapshot.identity?.name]);
+  }, [persistedElapsed, running, startedAt, timerKey, name, participantId, snapshot.identity?.name]);
+  // Results are shown to the hundredth, so store them that way too; otherwise
+  // two displayed-equal times would rank differently on hidden milliseconds.
   const current =
     mode === "timer"
-      ? elapsed
+      ? Math.round(elapsed * 100) / 100
       : event.kind === "duration"
         ? parseDuration(manual)
-        : Number(manual);
-  const selectedParticipantId =
-    participantId ?? participantIdForName(snapshot.data, name);
-  const best = selectedParticipantId
-    ? getBestAttempt(snapshot.data, event.id, selectedParticipantId)
-    : undefined;
-  const attempts = getAttemptsForEventParticipant(
-    snapshot.data,
-    event.id,
-    selectedParticipantId,
-    name,
+        : Number(manual.trim().replace(",", "."));
+  const data = snapshot.data;
+  const selectedParticipantId = useMemo(
+    () => participantId ?? participantIdForName(data, name),
+    [participantId, data, name],
+  );
+  const best = useMemo(
+    () =>
+      selectedParticipantId
+        ? getBestAttempt(data, event.id, selectedParticipantId)
+        : undefined,
+    [data, event.id, selectedParticipantId],
+  );
+  const attempts = useMemo(
+    () =>
+      getAttemptsForEventParticipant(data, event.id, selectedParticipantId, name),
+    [data, event.id, selectedParticipantId, name],
   );
   const submit = async () => {
     const manualBlank = mode === "manual" && manual.trim() === "";
