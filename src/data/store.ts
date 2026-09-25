@@ -70,9 +70,11 @@ const collections = [
 type CollectionName = (typeof collections)[number];
 // Everything but the admin-only audit log is publicly readable, so these load
 // without waiting on sign-in.
+type PublicCollection = Exclude<CollectionName, "audit">;
 const publicCollections = collections.filter(
-  (name): name is Exclude<CollectionName, "audit"> => name !== "audit",
+  (name): name is PublicCollection => name !== "audit",
 );
+const PENDING_WRITE_TTL_MS = 60_000;
 
 const emptyState = (): ConferenceState => ({
   categories: [],
@@ -765,6 +767,44 @@ class FirebaseStore extends BaseStore {
   private authErrorMessage: string | null = null;
   private googleAccountInUse = false;
   private catalogReady = new Map<"categories" | "events", boolean>();
+  // Transaction writes skip Firestore's local cache, so a listener only sees
+  // them once the server echoes them back, which can take many seconds on a
+  // stale connection. Committed writes are held here and shown until their
+  // listener catches up.
+  private pendingWrites = new Map<
+    string,
+    { name: PublicCollection; value: { id: string; revision?: unknown }; at: number }
+  >();
+  private withPending<T extends { id: string; revision?: unknown }>(name: PublicCollection, values: T[]) {
+    const now = Date.now();
+    const merged: T[] = [...values];
+    for (const [key, pending] of this.pendingWrites) {
+      if (pending.name !== name) continue;
+      const index = merged.findIndex((item) => item.id === pending.value.id);
+      const caughtUp =
+        index >= 0 &&
+        (pending.value.revision === undefined ||
+          Number(merged[index].revision ?? 0) >= Number(pending.value.revision));
+      if (caughtUp || now - pending.at > PENDING_WRITE_TTL_MS) {
+        this.pendingWrites.delete(key);
+        continue;
+      }
+      if (index >= 0) merged[index] = pending.value as T;
+      else merged.push(pending.value as T);
+    }
+    return merged;
+  }
+  private showCommitted(name: PublicCollection, value: { id: string; revision?: unknown }) {
+    this.pendingWrites.set(`${name}/${value.id}`, { name, value, at: Date.now() });
+    this.snapshot = {
+      ...this.snapshot,
+      data: {
+        ...this.snapshot.data,
+        [name]: this.withPending(name, this.snapshot.data[name] as { id: string }[]),
+      } as ConferenceState,
+    };
+    this.emit();
+  }
   private online = () => {
     this.snapshot = { ...this.snapshot, connected: true };
     this.emit();
@@ -845,8 +885,9 @@ class FirebaseStore extends BaseStore {
                 nextConnected === this.snapshot.connected
               )
                 return;
-              let values = result.docs.map((item) =>
-                fromFirestore(item.id, item.data()),
+              let values = this.withPending(
+                name,
+                result.docs.map((item) => fromFirestore(item.id, item.data())),
               );
               if (name === "categories")
                 values.sort(
@@ -1486,7 +1527,10 @@ class FirebaseStore extends BaseStore {
         );
         const auditRef = doc(db, "audit", randomId());
         const bracketAuditRef = doc(db, "audit", randomId());
+        let committedTeam: Record<string, unknown> = {};
+        let committedBracket: Record<string, unknown> | null = null;
         await runTransaction(db, async (transaction) => {
+          committedBracket = null;
           const eventSnapshot = await transaction.get(eventRef);
           const teamSnapshot = await transaction.get(teamRef);
           const bracketSnapshot = await transaction.get(bracketRef);
@@ -1519,6 +1563,7 @@ class FirebaseStore extends BaseStore {
             auditId: auditRef.id,
           };
           transaction.set(teamRef, after);
+          committedTeam = after;
           transaction.set(auditRef, {
             action: "saveTeam",
             entityType: "teams",
@@ -1537,6 +1582,7 @@ class FirebaseStore extends BaseStore {
             const registered = appendRegistrationEntrant(registration, id);
             const { id: _, ...storedBracket } = registered;
             transaction.set(bracketRef, { ...storedBracket, auditId: bracketAuditRef.id });
+            committedBracket = storedBracket;
             transaction.set(bracketAuditRef, {
               action: "joinBracket", entityType: "brackets", entityId: bracketRef.id,
               actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(),
@@ -1545,6 +1591,9 @@ class FirebaseStore extends BaseStore {
             });
           }
         });
+        this.showCommitted("teams", fromFirestore(id, committedTeam));
+        if (committedBracket)
+          this.showCommitted("brackets", fromFirestore(bracketRef.id, committedBracket));
         return;
       }
       if (command.type === "joinBracket") {
@@ -1554,7 +1603,9 @@ class FirebaseStore extends BaseStore {
         const teamRef = doc(db, "teams", command.entrantId);
         const bracketRef = doc(db, "brackets", `${command.eventId}-bracket`);
         const auditRef = doc(db, "audit", randomId());
+        let committed: Record<string, unknown> | null = null;
         await retryOnRace(() => runTransaction(db, async (transaction) => {
+          committed = null;
           const eventSnapshot = await transaction.get(eventRef);
           const bracketSnapshot = await transaction.get(bracketRef);
           const event = eventSnapshot.exists() ? eventSnapshot.data() : null;
@@ -1572,6 +1623,7 @@ class FirebaseStore extends BaseStore {
           const { id: _, ...stored } = registered;
           const after = { ...stored, auditId: auditRef.id };
           transaction.set(bracketRef, after);
+          committed = after;
           transaction.set(auditRef, {
             action: "joinBracket", entityType: "brackets", entityId: bracketRef.id,
             actorUid: actor.uid, actorName: actor.name, at: serverTimestamp(),
@@ -1579,6 +1631,7 @@ class FirebaseStore extends BaseStore {
             after, reason: "Entrant joined bracket registration",
           });
         }));
+        if (committed) this.showCommitted("brackets", fromFirestore(bracketRef.id, committed));
         return;
       }
       if (command.type === "startBracket") {
