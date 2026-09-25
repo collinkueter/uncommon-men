@@ -128,6 +128,7 @@ export function PageShell({
       </header>
       <Status />
       {children}
+      {!bare && <footer className="build-version">Version {__APP_COMMIT__}</footer>}
     </main>
   );
 }
@@ -159,7 +160,7 @@ export function Status() {
 export function RequireIdentity({ children }: { children: React.ReactNode }) {
   const { snapshot } = useConference();
   const location = useLocation();
-  if (snapshot.loading)
+  if (snapshot.identityLoading)
     return (
       <PageShell>
         <div />

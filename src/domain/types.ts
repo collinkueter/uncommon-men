@@ -12,7 +12,7 @@ export interface KnockoutGame { id: string; eventId: string; entrants: string[];
 export interface AuditEntry { id: string; action: string; entityType: string; entityId: string; actorUid: string; actorName: string; at: number; before: unknown; after: unknown; reason: string }
 export interface ConferenceState { categories: Category[]; events: Competition[]; participants: Participant[]; teams: Team[]; attempts: Attempt[]; brackets: Bracket[]; games: KnockoutGame[]; audit: AuditEntry[] }
 export interface Standing { id: string; name: string; rank: number; points: number; value: number; eventsPlayed: number }
-export interface AppSnapshot { data: ConferenceState; identity: Identity | null; loading: boolean; error: string | null; mode: 'demo' | 'firebase'; connected: boolean }
+export interface AppSnapshot { data: ConferenceState; identity: Identity | null; loading: boolean; identityLoading: boolean; error: string | null; mode: 'demo' | 'firebase'; connected: boolean }
 export type Command =
  | { type: 'identity'; name: string; participantId?: string }
  | { type: 'attempt'; eventId: string; name: string; participantId?: string; value: number; requestId: string }

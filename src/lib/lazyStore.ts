@@ -15,6 +15,7 @@ export class LazyConferenceStore implements ConferenceStore {
       data: { categories: [], events: [], participants: [], teams: [], attempts: [], brackets: [], games: [], audit: [] },
       identity: null,
       loading: true,
+      identityLoading: true,
       error: null,
       mode: demo ? "demo" : "firebase",
       connected: true,
@@ -32,6 +33,7 @@ export class LazyConferenceStore implements ConferenceStore {
         this.pending = {
           ...this.pending,
           loading: false,
+          identityLoading: false,
           error: "The app could not finish loading. Check your connection and refresh.",
         };
         this.emit();

@@ -21,6 +21,7 @@ import {
   connectFirestoreEmulator,
   doc,
   getDoc,
+  getDocFromCache,
   getFirestore,
   initializeFirestore,
   onSnapshot,
@@ -67,6 +68,11 @@ const collections = [
   "audit",
 ] as const;
 type CollectionName = (typeof collections)[number];
+// Everything but the admin-only audit log is publicly readable, so these load
+// without waiting on sign-in.
+const publicCollections = collections.filter(
+  (name): name is Exclude<CollectionName, "audit"> => name !== "audit",
+);
 
 const emptyState = (): ConferenceState => ({
   categories: [],
@@ -254,12 +260,19 @@ abstract class BaseStore implements ConferenceStore {
   protected emit() {
     this.listeners.forEach((listener) => listener());
   }
-  protected fail(error: unknown) {
+  // A failure settles only the part of loading it came from, so a slow or
+  // failed sign-in never hides competition data that has already arrived.
+  protected fail(error: unknown, scope: "data" | "identity" | "all" = "data") {
     const message = error instanceof Error ? error.message : String(error);
     log.error("Conference store operation failed", { error: message });
     const publicMessage =
       error instanceof FirebaseError ? friendlyFirebaseError(error) : message;
-    this.snapshot = { ...this.snapshot, loading: false, error: publicMessage };
+    this.snapshot = {
+      ...this.snapshot,
+      ...(scope !== "identity" && { loading: false }),
+      ...(scope !== "data" && { identityLoading: false }),
+      error: publicMessage,
+    };
     this.emit();
   }
   clearError = () => {
@@ -295,6 +308,7 @@ class DemoStore extends BaseStore {
         admin: true,
       },
       loading: false,
+      identityLoading: false,
       error: null,
       mode: "demo",
       connected: true,
@@ -764,6 +778,7 @@ class FirebaseStore extends BaseStore {
       data: emptyState(),
       identity: null,
       loading: true,
+      identityLoading: true,
       error: null,
       mode: "firebase",
       connected: false,
@@ -782,6 +797,7 @@ class FirebaseStore extends BaseStore {
         new Error(
           "Firebase is not configured. Add the VITE_FIREBASE_* environment variables, or open ?demo=1 for the local preview.",
         ),
+        "all",
       );
       return;
     }
@@ -815,7 +831,7 @@ class FirebaseStore extends BaseStore {
       this.unsubscribers.push(
         onAuthStateChanged(this.auth, (user) => void this.handleUser(user)),
       );
-      for (const name of collections.filter((value) => value !== "audit"))
+      for (const name of publicCollections)
         this.unsubscribers.push(
           onSnapshot(
             collection(this.db, name),
@@ -858,7 +874,7 @@ class FirebaseStore extends BaseStore {
               this.snapshot = {
                 ...this.snapshot,
                 data,
-                loading: this.loaded.size < collections.length,
+                loading: this.loaded.size < publicCollections.length,
                 error: catalogMissing
                   ? CATALOG_SETUP_ERROR
                   : catalogRestored &&
@@ -873,7 +889,7 @@ class FirebaseStore extends BaseStore {
           ),
         );
     } catch (error) {
-      this.fail(error);
+      this.fail(error, "all");
     }
   }
   // Sign-in failures (for example the per-IP anonymous sign-up limit on shared
@@ -881,11 +897,6 @@ class FirebaseStore extends BaseStore {
   // readable, the error is shown, and sign-in is retried with backoff.
   private scheduleAuthRetry(revision: number, user: User | null) {
     this.authErrorMessage = this.snapshot.error;
-    this.loaded.add("audit");
-    if (this.snapshot.loading && this.loaded.size >= collections.length) {
-      this.snapshot = { ...this.snapshot, loading: false };
-      this.emit();
-    }
     clearTimeout(this.authRetryTimer);
     this.authRetryDelay = Math.min(
       this.authRetryDelay ? this.authRetryDelay * 2 : 3000,
@@ -922,18 +933,21 @@ class FirebaseStore extends BaseStore {
       try {
         await signInAnonymously(this.auth!);
       } catch (error) {
-        this.fail(error);
+        this.fail(error, "identity");
         this.scheduleAuthRetry(revision, null);
       }
       return;
     }
     try {
-      const token = await getIdTokenResult(user);
+      const identityRef = doc(this.db!, "identities", user.uid);
+      // A returning visitor's identity is read from the local cache so a slow
+      // network does not hold the page; the listener below catches it up.
+      const [token, identityDocument] = await Promise.all([
+        getIdTokenResult(user),
+        getDocFromCache(identityRef).catch(() => getDoc(identityRef)),
+      ]);
       if (revision !== this.authRevision) return;
       const remembered = readRememberedIdentity();
-      const identityRef = doc(this.db!, "identities", user.uid);
-      const identityDocument = await getDoc(identityRef);
-      if (revision !== this.authRevision) return;
       let identity: Identity = {
         uid: user.uid,
         name: identityDocument.exists()
@@ -945,8 +959,8 @@ class FirebaseStore extends BaseStore {
         admin: token.claims.admin === true,
         email: user.isAnonymous ? undefined : user.email || undefined,
       };
-      this.snapshot = { ...this.snapshot, identity };
-      if (identityDocument.exists()) this.emit();
+      this.snapshot = { ...this.snapshot, identity, identityLoading: false };
+      this.emit();
       // A new account with a remembered name, or a name saved before names
       // joined the roster, gets its roster record now.
       if (identity.name && !identity.participantId) {
@@ -983,9 +997,8 @@ class FirebaseStore extends BaseStore {
           this.snapshot = { ...this.snapshot, identity: next };
           this.emit();
         },
-        (error) => this.fail(error),
+        (error) => this.fail(error, "identity"),
       );
-      this.loaded.add("audit");
       if (token.claims.admin === true)
         this.auditUnsubscribe = onSnapshot(
           collection(this.db!, "audit"),
@@ -1010,16 +1023,11 @@ class FirebaseStore extends BaseStore {
             };
             this.emit();
           },
-          (error) => this.fail(error),
+          (error) => this.fail(error, "identity"),
         );
-      this.snapshot = {
-        ...this.snapshot,
-        loading: this.loaded.size < collections.length,
-      };
-      this.emit();
       this.clearAuthError();
     } catch (error) {
-      this.fail(error);
+      this.fail(error, "identity");
       if (revision === this.authRevision) this.scheduleAuthRetry(revision, user);
     }
   }

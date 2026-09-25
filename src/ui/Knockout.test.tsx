@@ -22,7 +22,7 @@ function renderGame() {
 
 beforeEach(() => {
   const data = createSeedState();
-  context.snapshot = { data, identity: { uid: "test", name: "Test", admin: false }, loading: false, error: null, mode: "demo", connected: true };
+  context.snapshot = { data, identity: { uid: "test", name: "Test", admin: false }, loading: false, identityLoading: false, error: null, mode: "demo", connected: true };
   context.execute.mockReset();
 });
 

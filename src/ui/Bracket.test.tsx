@@ -24,7 +24,7 @@ function renderBracket(eventId = "chess") {
 beforeEach(() => {
   const data = createSeedState();
   data.brackets = [createBracket("chess", data.participants.slice(0, 3).map((p) => p.id))];
-  context.snapshot = { data, identity: { uid: "test", name: "Test", admin: false }, loading: false, error: null, mode: "demo", connected: true };
+  context.snapshot = { data, identity: { uid: "test", name: "Test", admin: false }, loading: false, identityLoading: false, error: null, mode: "demo", connected: true };
 });
 
 describe("bracket presentation", () => {

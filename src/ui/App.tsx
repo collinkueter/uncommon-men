@@ -36,7 +36,7 @@ function Router() {
       <Route
         path="/"
         element={
-          snapshot.loading ? <PageShell><div /></PageShell> :
+          snapshot.loading || snapshot.identityLoading ? <PageShell><div /></PageShell> :
           <Navigate
             to={withDemo(
               snapshot.identity?.name.trim() ? "/events" : "/welcome",

@@ -1032,3 +1032,14 @@ a:focus-visible {
 .route-pending {
   min-height: 60dvh;
 }
+.build-version {
+  padding: 2rem 1rem 1rem;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  text-align: center;
+  opacity: 0.6;
+  user-select: all;
+}
+@media (max-width: 760px) {
+  .app-shell:has(.bottom-nav) .build-version { padding-bottom: 5.5rem; }
+}
