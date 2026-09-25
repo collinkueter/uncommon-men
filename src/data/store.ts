@@ -1080,14 +1080,34 @@ class FirebaseStore extends BaseStore {
         )
           return;
         const id = await participantDocumentId(normalized);
-        await this.auditedWrite(
-          `participants/${id}`,
-          "addParticipant",
-          "Participant added",
-          (before) => {
-            if (before) return before;
-            return { name: command.name.trim(), normalizedName: normalized };
-          },
+        const { db, actor } = this.requireReady();
+        const participantRef = doc(db, "participants", id);
+        const auditRef = doc(db, "audit", randomId());
+        // A phone returning from sleep can show a cached roster that is missing
+        // someone another device just added. Rewriting that record would be an
+        // update, which only administrators may make, so an existing record is
+        // left alone and the live roster catches up on its own.
+        await retryOnRace(() =>
+          runTransaction(db, async (transaction) => {
+            if ((await transaction.get(participantRef)).exists()) return;
+            const after = {
+              name: command.name.trim(),
+              normalizedName: normalized,
+              auditId: auditRef.id,
+            };
+            transaction.set(participantRef, after);
+            transaction.set(auditRef, {
+              action: "addParticipant",
+              entityType: "participants",
+              entityId: id,
+              actorUid: actor.uid,
+              actorName: actor.name,
+              at: serverTimestamp(),
+              before: null,
+              after,
+              reason: "Participant added",
+            });
+          }),
         );
         return;
       }

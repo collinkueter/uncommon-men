@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Trophy } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
 import type { Competition, Match } from "@/domain/types";
 import { canAddBracketEntrants } from "@/domain/ranking";
+import { ParticipantPicker } from "./ParticipantPicker";
 import { Button, PageShell, withDemo } from "./shared";
 import "./BracketRoster.css";
 
@@ -14,8 +15,6 @@ export function Bracket({ event }: { event: Competition }) {
   const [selectedMatchId, setSelectedMatchId] = useState("");
   const [teamName, setTeamName] = useState("");
   const [members, setMembers] = useState<string[]>([]);
-  const [newParticipantName, setNewParticipantName] = useState("");
-  const [participantSearch, setParticipantSearch] = useState("");
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState("");
@@ -168,24 +167,16 @@ export function Bracket({ event }: { event: Competition }) {
     setMembers([]);
     setRosterMessage("");
   };
-  const addParticipant = async () => {
-    if (!newParticipantName.trim() || saving) return;
-    setSaving(true);
+  const addParticipant = async (name: string) => {
     setBracketError("");
     setRosterMessage("");
     try {
-      await execute({
-        type: "addParticipant",
-        name: newParticipantName.trim(),
-      });
-      setNewParticipantName("");
-      setRosterMessage(bracket
-        ? "Participant added to the conference. They were not added to the current bracket."
-        : "Participant added to the conference roster.");
+      await execute({ type: "addParticipant", name });
+      setRosterMessage(`${name} added to the conference roster and selected.`);
+      return true;
     } catch {
-      setBracketError("Could not add that participant.");
-    } finally {
-      setSaving(false);
+      setBracketError(`Could not add ${name}. Check your connection and try again.`);
+      return false;
     }
   };
   const start = async () => {
@@ -212,9 +203,6 @@ export function Bracket({ event }: { event: Competition }) {
       setSaving(false);
     }
   };
-  const eventParticipants = snapshot.data.participants.filter((participant) =>
-    participant.name.toLowerCase().includes(participantSearch.trim().toLowerCase()),
-  );
   const eventTeams = snapshot.data.teams.filter((team) => team.eventId === event.id);
   const teamForId = (id: string | null) => id ? snapshot.data.teams.find((team) => team.id === id) : undefined;
   const memberNames = (team: (typeof eventTeams)[number]) =>
@@ -397,15 +385,8 @@ export function Bracket({ event }: { event: Competition }) {
               <div>
                 <h2 id="bracket-roster-title">MANAGE {event.team ? "TEAMS" : "PARTICIPANTS"}</h2>
               </div>
-              {bracket && <p className="roster-note">{event.team ? "You can add participants and create or edit teams here. Add a registered team while the bracket is open; matchups and byes will be rearranged. After the first result, the bracket is locked." : "You can add conference participants here. New participants do not enter the current bracket automatically; matchups and recorded results are preserved."}</p>}
+              {bracket && <p className="roster-note">{event.team ? "You can create or edit teams here. Add a registered team while the bracket is open; matchups and byes will be rearranged. After the first result, the bracket is locked." : "This bracket has started. Matchups and recorded results are preserved."}</p>}
             </div>
-            <form className="roster-add-participant" onSubmit={(formEvent) => { formEvent.preventDefault(); void addParticipant(); }}>
-              <div className="bracket-field">
-                <label htmlFor="bracket-new-participant">Add conference participant</label>
-                <input id="bracket-new-participant" value={newParticipantName} onChange={(e) => setNewParticipantName(e.target.value)} placeholder="Participant name" />
-              </div>
-              <Button type="submit" disabled={saving || !newParticipantName.trim()}>Add participant</Button>
-            </form>
             {event.team && (
               <div className="team-registration">
                 <h3>{editingTeamId ? "EDIT TEAM" : "REGISTER A TEAM"}</h3>
@@ -415,15 +396,7 @@ export function Bracket({ event }: { event: Competition }) {
                     <label htmlFor="bracket-team-name">Team name</label>
                     <input ref={teamNameInput} id="bracket-team-name" placeholder="Team name" value={teamName} onChange={(e) => setTeamName(e.target.value)} />
                   </div>
-                  <input className="roster-search" aria-label="Search participants" placeholder="Search participants" value={participantSearch} onChange={(e) => setParticipantSearch(e.target.value)} />
-                  <div className="roster-checks">
-                    {eventParticipants.map((p) => (
-                      <label className="check" key={p.id}>
-                        <input type="checkbox" checked={members.includes(p.id)} onChange={() => setMembers((current) => current.includes(p.id) ? current.filter((id) => id !== p.id) : event.teamSize ? [...current, p.id].slice(0, event.teamSize) : [...current, p.id])} />
-                        {p.name}
-                      </label>
-                    ))}
-                  </div>
+                  <ParticipantPicker id="bracket-team-members" label="Team members" participants={snapshot.data.participants} selected={members} onChange={setMembers} max={event.teamSize} onCreate={addParticipant} />
                   <div className="roster-actions">
                     <Button type="submit" className="primary" disabled={saving}>{saving ? "Saving…" : editingTeamId ? "Save changes" : "Save team"}</Button>
                     {editingTeamId && <Button type="button" onClick={cancelEditTeam} disabled={saving}>Cancel</Button>}
@@ -435,9 +408,7 @@ export function Bracket({ event }: { event: Competition }) {
               <div className="bracket-start-roster">
                 <h3>SELECT ENTRANTS</h3>
                 <p>{event.team ? "Saved teams become entrants when you start this bracket." : "Select participants for this bracket."}</p>
-                {!event.team && eventParticipants.map((p) => (
-                  <label className="check" key={p.id}><input type="checkbox" checked={members.includes(p.id)} onChange={() => setMembers((current) => current.includes(p.id) ? current.filter((id) => id !== p.id) : [...current, p.id])} />{p.name}</label>
-                ))}
+                {!event.team && <ParticipantPicker id="bracket-entrants" label="Entrants" participants={snapshot.data.participants} selected={members} onChange={setMembers} onCreate={addParticipant} />}
               </div>
             )}
             {event.team && <div className="registered-teams">

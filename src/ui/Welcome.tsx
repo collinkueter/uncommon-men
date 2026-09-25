@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
 import { normalizeName } from "@/domain/ranking";
-import type { Identity, Participant } from "@/domain/types";
+import { findSimilarParticipants } from "@/domain/nameMatch";
+import type { ConferenceState, Participant } from "@/domain/types";
 import { Button, PageShell, withDemo } from "./shared";
 import "./EntryForms.css";
 
@@ -17,17 +18,89 @@ export function safeReturnPath(next: string | null) {
     : "/events";
 }
 
-export function resolveIdentityParticipantId(
-  name: string,
-  identity: Identity | null | undefined,
-  currentParticipantId: string | undefined,
-  participants: Participant[],
-) {
-  if (currentParticipantId) return currentParticipantId;
-  const normalized = normalizeName(name);
-  if (identity?.participantId && normalized === normalizeName(identity.name))
-    return identity.participantId;
-  return participants.find((participant) => normalizeName(participant.name) === normalized)?.id;
+const relativeTime = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+function timeAgo(at: number, now: number) {
+  const minutes = Math.round((at - now) / 60000);
+  if (Math.abs(minutes) < 60) return relativeTime.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return relativeTime.format(hours, "hour");
+  return relativeTime.format(Math.round(hours / 24), "day");
+}
+
+// What the roster already knows about someone, so a person can recognize the
+// record a teammate made for them: the teams they are on and the last result
+// logged for them or their team.
+export function participantDetails(
+  participant: Participant,
+  data: ConferenceState,
+  now = Date.now(),
+): { teams: string | null; activity: string } {
+  const teams = data.teams.filter((team) => team.memberIds.includes(participant.id));
+  const eventName = (id: string) => data.events.find((event) => event.id === id)?.name;
+  // Teams often keep one name across events: "Iron Brothers (Cornhole, Foosball)".
+  const eventsByTeamName = new Map<string, string[]>();
+  for (const team of teams) {
+    const events = eventsByTeamName.get(team.name) ?? [];
+    const event = eventName(team.eventId);
+    if (event) events.push(event);
+    eventsByTeamName.set(team.name, events);
+  }
+  const teamLabels = [...eventsByTeamName].map(([name, events]) =>
+    events.length ? `${name} (${events.join(", ")})` : name,
+  );
+  const competitorIds = new Set([participant.id, ...teams.map((team) => team.id)]);
+  const results = data.attempts.filter(
+    (attempt) => attempt.valid && competitorIds.has(attempt.participantId),
+  );
+  const latest = results.reduce<(typeof results)[number] | undefined>(
+    (best, attempt) => (!best || attempt.createdAt > best.createdAt ? attempt : best),
+    undefined,
+  );
+  const latestEvent = latest && eventName(latest.eventId);
+  return {
+    teams: teamLabels.length
+      ? `${teamLabels.length === 1 ? "Team" : "Teams"}: ${teamLabels.slice(0, 2).join(", ")}${teamLabels.length > 2 ? ` +${teamLabels.length - 2} more` : ""}`
+      : null,
+    activity: latest
+      ? `Last logged ${latestEvent ?? "a result"} ${timeAgo(latest.createdAt, now)}${results.length > 1 ? ` · ${results.length} results` : ""}`
+      : teams.length
+        ? "No results logged yet"
+        : "Added to the roster, no results yet",
+  };
+}
+
+function ParticipantOption({
+  participant,
+  data,
+  selected,
+  action,
+  onPick,
+  disabled,
+}: {
+  participant: Participant;
+  data: ConferenceState;
+  selected?: boolean;
+  action?: string;
+  onPick: () => void;
+  disabled?: boolean;
+}) {
+  const details = participantDetails(participant, data);
+  return (
+    <button
+      type="button"
+      className={`participant-option${selected ? " selected" : ""}`}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onPick}
+    >
+      <span className="participant-option-text">
+        <strong>{participant.name}</strong>
+        {details.teams && <small>{details.teams}</small>}
+        <small className="participant-option-activity">{details.activity}</small>
+      </span>
+      {selected ? <Check aria-hidden="true" /> : action && <span className="claim-cta">{action}</span>}
+    </button>
+  );
 }
 
 export function Welcome() {
@@ -39,6 +112,10 @@ export function Welcome() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [googlePending, setGooglePending] = useState(false);
+  // Set when the typed name resembles people already on the roster, most
+  // often because a teammate added this person to a team before they
+  // opened the app. Picking one connects this device to that record.
+  const [confirming, setConfirming] = useState<{ name: string; candidates: Participant[] } | null>(null);
   const initializedFromIdentity = useRef(false);
   const hasIdentity = Boolean(snapshot.identity?.name.trim());
   useEffect(() => {
@@ -47,13 +124,15 @@ export function Welcome() {
       initializedFromIdentity.current = true;
     }
   }, [snapshot.identity?.name]);
-  const matches = useMemo(
-    () =>
-      snapshot.data.participants
-        .filter((p) => normalizeName(p.name).includes(normalizeName(name)))
-        .slice(0, 5),
-    [name, snapshot.data.participants],
-  );
+  const matches = useMemo(() => {
+    const query = normalizeName(name);
+    if (!query) return [];
+    const similar = findSimilarParticipants(name, snapshot.data.participants);
+    const partial = snapshot.data.participants.filter(
+      (p) => !similar.includes(p) && normalizeName(p.name).includes(query),
+    );
+    return [...similar, ...partial].slice(0, 5);
+  }, [name, snapshot.data.participants]);
   const returnToNext = () => {
     const next = new URLSearchParams(location.search).get("next");
     navigate(withDemo(safeReturnPath(next)));
@@ -61,10 +140,14 @@ export function Welcome() {
   // Google sign-in can switch to a different account; wait until that
   // account's profile has loaded before leaving this screen.
   useEffect(() => {
-    if (googlePending && snapshot.identity?.email && snapshot.identity.name.trim()) {
-      setGooglePending(false);
-      returnToNext();
-    }
+    const identity = snapshot.identity;
+    if (!googlePending || !identity?.email || !identity.name.trim()) return;
+    setGooglePending(false);
+    const candidates = identity.participantId
+      ? []
+      : findSimilarParticipants(identity.name, snapshot.data.participants);
+    if (candidates.length) setConfirming({ name: identity.name, candidates });
+    else returnToNext();
   }, [googlePending, snapshot.identity?.email, snapshot.identity?.name]);
   useEffect(() => {
     if (!googlePending) return;
@@ -95,30 +178,86 @@ export function Welcome() {
       setSaving(false);
     }
   };
-  const save = async () => {
-    if (!name.trim() || saving) return;
+  const commit = async (displayName: string, participantId: string | undefined) => {
     setSaving(true);
     setError("");
     try {
-      const participantId = resolveIdentityParticipantId(
-        name,
-        snapshot.identity,
-        selected?.id,
-        snapshot.data.participants,
-      );
-      await execute({
-        type: "identity",
-        name: name.trim(),
-        participantId,
-      });
-      const next = new URLSearchParams(location.search).get("next");
-      navigate(withDemo(safeReturnPath(next)));
+      await execute({ type: "identity", name: displayName, participantId });
+      returnToNext();
     } catch {
       setError("Could not save your name. Please try again.");
     } finally {
       setSaving(false);
     }
   };
+  const save = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || saving) return;
+    if (selected) return commit(selected.name, selected.id);
+    const linked = snapshot.identity?.participantId;
+    if (linked && normalizeName(trimmed) === normalizeName(snapshot.identity!.name))
+      return commit(trimmed, linked);
+    const candidates = findSimilarParticipants(trimmed, snapshot.data.participants);
+    if (candidates.length) {
+      setError("");
+      setConfirming({ name: trimmed, candidates });
+      return;
+    }
+    return commit(trimmed, undefined);
+  };
+  // Results are matched by name, so a second person with exactly the same
+  // name would share a record. Ask for something that tells them apart.
+  const notMe = () => {
+    if (!confirming) return;
+    const normalized = normalizeName(confirming.name);
+    if (confirming.candidates.some((participant) => normalizeName(participant.name) === normalized)) {
+      setName(confirming.name);
+      setConfirming(null);
+      setError(`Someone named ${confirming.name} is already on the roster. Add a last name, middle initial or nickname so your results stay separate.`);
+      return;
+    }
+    void commit(confirming.name, undefined);
+  };
+  if (confirming)
+    return (
+      <PageShell>
+        <div className="welcome">
+          <div className="eyebrow">One more step</div>
+          <h1>IS ONE OF THESE YOU?</h1>
+          <p>
+            A teammate may have already added you to a team or entered a result for you.
+            Pick your name to keep it all together.
+          </p>
+          <div className="participant-options claim-list">
+            {confirming.candidates.map((participant) => (
+              <ParticipantOption
+                key={participant.id}
+                participant={participant}
+                data={snapshot.data}
+                action="That’s me"
+                disabled={saving}
+                onPick={() => void commit(participant.name, participant.id)}
+              />
+            ))}
+          </div>
+          <Button className="secondary" type="button" disabled={saving} onClick={notMe}>
+            {saving ? "Saving…" : `None of these, continue as ${confirming.name}`}
+          </Button>
+          <button
+            type="button"
+            className="underline claim-back"
+            disabled={saving}
+            onClick={() => {
+              setName(confirming.name);
+              setConfirming(null);
+            }}
+          >
+            Change the name I typed
+          </button>
+          {error && <p className="form-message" role="alert">{error}</p>}
+        </div>
+      </PageShell>
+    );
   return (
     <PageShell>
       <form
@@ -149,22 +288,19 @@ export function Welcome() {
           />
         </div>
         {name.trim() && matches.length > 0 && (
-          <div className="suggestions">
+          <div className="participant-options" aria-label="People already on the roster">
+            <p className="participant-options-hint">Already on the roster? Tap your name.</p>
             {matches.map((p) => (
-              <button
+              <ParticipantOption
                 key={p.id}
-                type="button"
-                onClick={() => {
+                participant={p}
+                data={snapshot.data}
+                selected={selected?.id === p.id}
+                onPick={() => {
                   setName(p.name);
                   setSelected(p);
                 }}
-              >
-                <span>
-                  <strong>{p.name}</strong>
-                  <small>Existing participant</small>
-                </span>
-                {selected?.id === p.id && <Check />}
-              </button>
+              />
             ))}
           </div>
         )}

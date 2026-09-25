@@ -1,47 +1,32 @@
 import { describe, expect, it } from "vitest";
-import type { Identity, Participant } from "@/domain/types";
-import { resolveIdentityParticipantId, safeReturnPath } from "./Welcome";
+import { createSeedState } from "@/data/seed";
+import { participantDetails, safeReturnPath } from "./Welcome";
 
-const participant: Participant = {
-  id: "participant-1",
-  name: "Caleb Johnson",
-  normalizedName: "caleb johnson",
-};
-
-const identity: Identity = {
-  uid: "user-1",
-  name: "Caleb Johnson",
-  admin: false,
-};
-
-describe("identity participant resolution", () => {
-  it("preserves the linked participant for an unchanged identity", () => {
-    expect(
-      resolveIdentityParticipantId(
-        "Caleb Johnson",
-        { ...identity, participantId: "linked-participant" },
-        undefined,
-        [participant],
-      ),
-    ).toBe("linked-participant");
+describe("participant details", () => {
+  it("names the team and the last result logged for that team", () => {
+    const data = createSeedState();
+    const team = data.teams.find((item) => item.memberIds.length)!;
+    const member = data.participants.find((item) => item.id === team.memberIds[0])!;
+    const event = data.events.find((item) => item.id === team.eventId)!;
+    const eventId = data.events.find((item) => item.kind !== "bracket")!.id;
+    data.attempts = [
+      { id: "a1", eventId, participantId: member.id, value: 10, valid: true, recordedBy: "u", recorderName: "U", createdAt: 1_000, updatedAt: 1_000, revision: 1 },
+      { id: "a2", eventId: event.id, participantId: team.id, value: 5, valid: true, recordedBy: "u", recorderName: "U", createdAt: 2_000, updatedAt: 2_000, revision: 1 },
+    ];
+    const details = participantDetails(member, data, 2_000 + 3 * 3_600_000);
+    expect(details.teams).toContain(`${team.name} (`);
+    expect(details.teams).toContain(event.name);
+    // One team name used in several events is listed once.
+    expect(details.teams!.split(team.name)).toHaveLength(2);
+    expect(details.activity).toBe(`Last logged ${event.name} 3 hours ago · 2 results`);
   });
 
-  it("falls through to an exact participant when the identity is not linked", () => {
-    expect(
-      resolveIdentityParticipantId("caleb johnson", identity, undefined, [participant]),
-    ).toBe(participant.id);
-  });
-
-  it("resolves a selected exact existing name", () => {
-    expect(
-      resolveIdentityParticipantId("Caleb Johnson", { ...identity, name: "Other Name" }, undefined, [participant]),
-    ).toBe(participant.id);
-  });
-
-  it("leaves a new name unlinked", () => {
-    expect(
-      resolveIdentityParticipantId("New Name", identity, undefined, [participant]),
-    ).toBeUndefined();
+  it("describes someone who was only added by name", () => {
+    const data = createSeedState();
+    expect(participantDetails({ id: "new", name: "Roger", normalizedName: "roger" }, data)).toEqual({
+      teams: null,
+      activity: "Added to the roster, no results yet",
+    });
   });
 });
 
