@@ -105,7 +105,7 @@ export function ParticipantPicker({
       </div>
       <p className="picker-status" aria-live="polite">
         {max > 0
-          ? `${selected.length} of ${max} selected${full ? " · uncheck someone to swap" : ""}`
+          ? `${selected.length} of ${max} selected${full ? ". Uncheck someone to swap" : ""}`
           : `${selected.length} selected`}
         {normalizedQuery ? ` · ${visible.length} ${visible.length === 1 ? "match" : "matches"}` : ` · ${participants.length} on the roster`}
       </p>

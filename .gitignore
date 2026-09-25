@@ -15,3 +15,4 @@ artifacts/demo/
 artifacts/verification/
 docs/screenshots/
 tmp/
+.vitest/

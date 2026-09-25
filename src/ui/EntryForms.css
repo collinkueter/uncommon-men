@@ -114,18 +114,16 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin: 1.25rem 0 1rem;
+  margin: 0.25rem 0 1rem;
   color: var(--color-muted);
   font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
 }
 
 .welcome .auth-divider::before,
 .welcome .auth-divider::after {
   content: "";
   flex: 1;
-  border-top: 1px solid #ffffff26;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .welcome .google-button {
@@ -154,7 +152,7 @@
   gap: 1rem;
   margin-top: 1.25rem;
   padding: 0.85rem 1rem;
-  border: 1px solid #ffffff26;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
@@ -210,9 +208,9 @@
   width: 100%;
   min-height: 64px;
   padding: 0.85rem 1rem;
-  border: 1px solid #ffffff1f;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: #282c28;
+  background: var(--color-surface-raised);
   color: var(--color-text);
   font: inherit;
   text-align: left;
@@ -221,13 +219,13 @@
 }
 
 .participant-option:hover:not(:disabled) {
-  border-color: #ffffff45;
-  background: #2e332e;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
 }
 
 .participant-option.selected {
   border-color: var(--color-accent);
-  background: #2c3223;
+  background: var(--color-accent-surface);
 }
 
 .participant-option:disabled {
@@ -258,7 +256,7 @@
 }
 
 .participant-option-text .participant-option-activity {
-  color: #8f9289;
+  color: var(--color-subtle);
 }
 
 .claim-cta {
@@ -277,4 +275,22 @@
   font: 600 1rem var(--font-body);
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* A saved attempt gets one confirming pulse so it registers at a glance. */
+.form-message.saved {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-wash);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .form-message.saved {
+    animation: saved-pulse 700ms var(--ease-spring);
+  }
+}
+@keyframes saved-pulse {
+  0% { transform: scale(0.96); background: var(--color-accent-surface); }
+  100% { transform: scale(1); background: var(--color-accent-wash); }
 }

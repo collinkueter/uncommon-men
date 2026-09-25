@@ -21,7 +21,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("add team command", () => {
   it("adds and audits once, rejects stale retries, and locks after play", async () => {
-    const store = createConferenceStore();
+    const store = await createConferenceStore();
     const original = store.getSnapshot().data.brackets[0];
     const teams = store.getSnapshot().data.teams.filter((team) => team.eventId === "cornhole");
     const command = { type: "addBracketTeam" as const, bracketId: original.id, teamId: teams[2].id, revision: original.revision };
@@ -38,7 +38,7 @@ describe("add team command", () => {
   });
 
   it("rejects nonadmins and teams from another event", async () => {
-    const store = createConferenceStore();
+    const store = await createConferenceStore();
     const bracket = store.getSnapshot().data.brackets[0];
     const other = store.getSnapshot().data.teams.find((team) => team.eventId !== "cornhole")!;
     const command = { type: "addBracketTeam" as const, bracketId: bracket.id, teamId: other.id, revision: bracket.revision };

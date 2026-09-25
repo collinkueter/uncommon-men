@@ -1,3 +1,4 @@
+import { DEMO_RECORDED_AT } from "./demoClock";
 import { initialCategories, initialEvents } from "@/domain/catalog";
 import { advanceBracket, createBracket, normalizeName } from "@/domain/ranking";
 import type {
@@ -9,6 +10,8 @@ import type {
   Team,
 } from "@/domain/types";
 
+export { DEMO_RECORDED_AT };
+
 const names = [
   "Caleb Johnson",
   "Marcus Reed",
@@ -19,8 +22,6 @@ const names = [
   "Noah Bennett",
   "Micah Stone",
 ];
-// Keep the fixture activity close to the September 22, 2026 demo capture.
-export const DEMO_RECORDED_AT = Date.parse("2026-09-22T09:00:00-05:00");
 const participants: Participant[] = names.map((name, index) => ({
   id: `demo-p${index + 1}`,
   name,

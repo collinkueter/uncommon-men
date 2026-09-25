@@ -5,7 +5,7 @@ import { useConference } from "@/lib/ConferenceContext";
 import type { Competition, Match } from "@/domain/types";
 import { canAddBracketEntrants } from "@/domain/ranking";
 import { ParticipantPicker } from "./ParticipantPicker";
-import { Button, PageShell, withDemo } from "./shared";
+import { Button, PageShell, useMediaQuery, withDemo } from "./shared";
 import "./BracketRoster.css";
 
 export function Bracket({ event }: { event: Competition }) {
@@ -40,6 +40,11 @@ export function Bracket({ event }: { event: Competition }) {
     return !m.winnerId || Boolean(snapshot.identity?.admin);
   }) ?? (selectedMatchId ? undefined : bracket?.matches.find((m) => m.sideA && m.sideB && !m.winnerId));
   const finalRound = rounds[rounds.length - 1] ?? 1;
+  // Show one round at a time whenever the full tree would need sideways
+  // scrolling on a phone or tablet. Wide screens keep the whole board.
+  const stacked = useMediaQuery(`(max-width: ${Math.max(760, Math.min(1000, rounds.length * 272 + 80))}px)`);
+  const toPlay = (round: number) =>
+    bracket?.matches.filter((m) => m.round === round && m.sideA && m.sideB && !m.winnerId).length ?? 0;
   const champion = bracket?.matches.find((m) => m.round === finalRound)?.winnerId;
   const matchLabel = (match: { round: number; position: number }) => `Round ${match.round}, match ${match.position + 1}`;
   const sideName = (match: Match, id: string | null, side: "A" | "B") => {
@@ -229,7 +234,7 @@ export function Bracket({ event }: { event: Competition }) {
     }
   };
   const bracketBoard = bracket && (
-    <section className="bracket-workspace" aria-labelledby="bracket-title">
+    <section className={`bracket-workspace ${stacked ? "stacked" : ""}`} aria-labelledby="bracket-title">
       <div className="bracket-workspace-heading">
         <div>
           <h2 id="bracket-title">{bracket.status === "complete" ? "CHAMPIONSHIP COMPLETE" : "LIVE BRACKET"}</h2>
@@ -237,10 +242,9 @@ export function Bracket({ event }: { event: Competition }) {
         {champion && bracket.status === "complete" && <p className="bracket-champion"><Trophy aria-hidden="true" /> Champion: <strong>{names(champion)}</strong></p>}
       </div>
       <nav className="round-nav" aria-label="Bracket rounds">
-        {rounds.map((round) => <button key={round} type="button" className={mobileRound === round ? "selected" : ""} aria-current={mobileRound === round ? "true" : undefined} onClick={() => setMobileRound(round)}>{roundLabel(round)}</button>)}
+        {rounds.map((round) => <button key={round} type="button" className={mobileRound === round ? "selected" : ""} aria-current={mobileRound === round ? "true" : undefined} onClick={() => setMobileRound(round)}>{roundLabel(round)}{toPlay(round) > 0 && <small>{toPlay(round)} to play</small>}</button>)}
       </nav>
       <p className="bracket-help">{bracket.status === "complete" ? snapshot.identity?.admin ? "Select a completed match to correct its result." : "Follow each round to see the path to the championship." : "Select a ready match to record its winner."}</p>
-      {rounds.length > 2 && <p className="bracket-scroll-hint">Scroll across the bracket to follow each round.</p>}
       <div className="bracket-board" role="region" tabIndex={0} aria-label="Single elimination bracket" style={{ "--round-count": rounds.length, "--tree-rows": 2 ** (rounds.length), "--tree-end": 2 ** (rounds.length) + 2 } as CSSProperties}>
         {rounds.map((round) => (
           <section className={`round ${mobileRound === round ? "mobile-active" : ""}`} key={round} aria-labelledby={`round-${round}`}>
@@ -304,7 +308,7 @@ export function Bracket({ event }: { event: Competition }) {
             <p className="event-instructions">{event.instructions}</p>
           )}
           <p className="event-instructions">
-            {event.team ? "Team championship · Separate from individual points" : "Individual championship · Counts toward overall points"}
+            {event.team ? "Team championship. Separate from individual points." : "Individual championship. Counts toward overall points."}
           </p>
         </header>
         <div className={`bracket-play ${!bracket ? "bracket-not-started" : ""}`}>

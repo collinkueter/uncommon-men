@@ -222,7 +222,6 @@ export function Welcome() {
     return (
       <PageShell>
         <div className="welcome">
-          <div className="eyebrow">One more step</div>
           <h1>IS ONE OF THESE YOU?</h1>
           <p>
             A teammate may have already added you to a team or entered a result for you.
@@ -267,7 +266,6 @@ export function Welcome() {
           void save();
         }}
       >
-        <div className="eyebrow">{hasIdentity ? "Profile" : "First visit"}</div>
         <h1>{hasIdentity ? "CHANGE YOUR NAME" : "WHAT’S YOUR NAME?"}</h1>
         <p>
           {hasIdentity

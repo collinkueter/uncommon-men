@@ -1,11 +1,12 @@
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
-import { createConferenceStore } from '@/data/store';
 import type { ConferenceStore } from '@/domain/types';
+import { LazyConferenceStore } from '@/lib/lazyStore';
 
 const Context = createContext<ConferenceStore | null>(null);
 let activeStore: ConferenceStore | undefined;
+const isDemo = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === '1';
 export function ConferenceProvider({ children }: { children: ReactNode }) {
-  const store = activeStore ??= createConferenceStore();
+  const store = activeStore ??= new LazyConferenceStore(() => import('@/data/store').then(({ createConferenceStore }) => createConferenceStore()), isDemo());
   return <Context.Provider value={store}>{children}</Context.Provider>;
 }
 export function useConference() {

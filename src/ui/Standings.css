@@ -1,0 +1,331 @@
+/* Standings doubles as the projector view: podium, then the chasing pack,
+   then controls, all inside one 1440x900 screen. */
+.presentation-shell {
+  max-width: none;
+}
+.presentation {
+  max-width: 1180px;
+  margin: auto;
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+.stand-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 1040px);
+  margin: 0.5rem auto 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.stand-tabs button {
+  min-height: 44px;
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: 800 1.1rem var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
+}
+.stand-tabs button:last-child {
+  border-right: 0;
+}
+.stand-tabs button:focus-visible {
+  outline-offset: -3px;
+}
+.stand-tabs button.active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.stand-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  margin: 1.25rem 0 0.5rem;
+}
+.stand-title h1 {
+  margin: 0;
+  font: 900 clamp(2.2rem, 5vw, 4.25rem) / 0.9 var(--font-display);
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.stand-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--color-muted);
+  font-size: 1rem;
+}
+.stand-title .standings-filter {
+  grid-column: 1 / -1;
+  justify-self: end;
+  width: min(100%, 280px);
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  align-self: start;
+  color: var(--color-accent);
+  font: 800 1.05rem var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.live span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+.live.offline {
+  color: var(--color-warning);
+}
+
+/* Podium: second, first, third, left to right. */
+.podium {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1fr;
+  align-items: end;
+  gap: 0.75rem;
+  margin: 1.25rem auto 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.podium-1 {
+  grid-template-columns: minmax(0, 420px);
+  justify-content: center;
+}
+.podium-2 {
+  grid-template-columns: 1fr 1.15fr;
+  width: min(100%, 780px);
+}
+.podium-step {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  text-align: center;
+}
+.podium-step strong {
+  max-width: 100%;
+  font: 800 clamp(1.2rem, 2.6vw, 2.5rem) / 1 var(--font-display);
+  overflow-wrap: anywhere;
+}
+.podium-score {
+  color: var(--color-muted);
+  font: 700 clamp(1rem, 1.9vw, 1.8rem) / 1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.podium-block {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  margin-top: 0.4rem;
+  border-top: 4px solid var(--color-accent-line);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--color-surface-raised);
+  font: 900 clamp(2.4rem, 5.5vw, 5rem) / 1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.place-1 .podium-block {
+  height: clamp(110px, 21vh, 200px);
+  border-top-color: var(--color-accent-bright);
+  background: linear-gradient(160deg, var(--color-accent-bright), var(--color-accent-deep));
+  color: var(--color-on-accent);
+}
+.place-1 strong {
+  color: var(--color-accent);
+}
+.place-1 .podium-score {
+  color: var(--color-text);
+}
+.place-2 .podium-block {
+  height: clamp(84px, 15vh, 150px);
+}
+.place-3 .podium-block {
+  height: clamp(64px, 11vh, 112px);
+}
+.podium-crown {
+  width: 30px;
+  height: 30px;
+  color: var(--color-accent);
+}
+
+/* The chasing pack reads as a plain ranked list, not a stack of cards. */
+.standing-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+.standing-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  min-height: 64px;
+  padding-right: 0.75rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.standing-row b,
+.standing-row strong,
+.standing-row > span {
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+.standing-row b {
+  color: var(--color-subtle);
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.standing-row strong {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  font-size: clamp(1.4rem, 3vw, 2.6rem);
+  overflow-wrap: anywhere;
+}
+.standing-row > span {
+  font-size: clamp(1.2rem, 2.4vw, 2.2rem);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.movement {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  font: 600 0.9rem / 1 var(--font-body);
+  font-variant-numeric: tabular-nums;
+}
+.movement svg {
+  width: 16px;
+  height: 16px;
+}
+.movement.up {
+  color: var(--color-accent);
+}
+.movement.down {
+  color: var(--color-danger);
+}
+
+.presentation-controls {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.presentation-controls .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.page-indicator {
+  margin: 0.5rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Motion: a new leader rises, a moved row flashes once, the live dot breathes. */
+@media (prefers-reduced-motion: no-preference) {
+  .place-1 .podium-block {
+    transform-origin: bottom;
+    animation: podium-rise var(--duration-slow) var(--ease-spring);
+  }
+  .place-1 strong {
+    animation: leader-in var(--duration-slow) var(--ease-spring);
+  }
+  .standing-row.moved {
+    animation: row-flash 1.6s var(--ease-out);
+  }
+  .live span {
+    animation: live-pulse 2.4s ease-in-out infinite;
+  }
+}
+@keyframes podium-rise {
+  from { transform: scaleY(0.6); opacity: 0.4; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+@keyframes leader-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes row-flash {
+  from { background: var(--color-accent-surface); }
+  to { background: transparent; }
+}
+@keyframes live-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (min-width: 761px) {
+  .presentation-shell {
+    background:
+      linear-gradient(90deg, var(--color-shell-fade), var(--color-shell) 14%, var(--color-shell) 86%, var(--color-shell-fade)),
+      url("/brand/camo.svg") center / 700px repeat;
+  }
+}
+
+/* Short projector screens: keep controls on screen. */
+@media (min-width: 761px) and (max-height: 800px) {
+  .stand-title { margin-top: 0.75rem; }
+  .stand-title h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+  .podium { margin-top: 0.75rem; }
+  .standing-row { min-height: 54px; }
+  .presentation-controls .button { min-height: 44px; }
+}
+
+@media (max-width: 760px) {
+  .presentation {
+    padding: 0.75rem 1rem 6.5rem;
+  }
+  .stand-tabs button {
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+  }
+  .stand-title {
+    margin-top: 1rem;
+  }
+  .stand-title .standings-filter {
+    justify-self: stretch;
+    width: 100%;
+  }
+  .live {
+    font-size: 0.85rem;
+  }
+  .podium {
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+  }
+  .podium-crown {
+    width: 22px;
+    height: 22px;
+  }
+  .place-1 .podium-block { height: 104px; }
+  .place-2 .podium-block { height: 80px; }
+  .place-3 .podium-block { height: 60px; }
+  .standing-row {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    min-height: 56px;
+  }
+  .presentation-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  .presentation-controls .button {
+    min-height: 48px;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Link, Navigate, NavLink, useLocation } from "react-router-dom";
 import {
   CalendarDays,
@@ -30,6 +30,24 @@ export const scoreLabel = (event: Competition) => {
   return event.direction === "higher"
     ? `Most ${event.unit}`
     : `Fewest ${event.unit}`;
+};
+
+export function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (onChange) => {
+      const list = window.matchMedia(query);
+      list.addEventListener("change", onChange);
+      return () => list.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
+
+export const ordinal = (n: number) => {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${n}${suffix}`;
 };
 
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -132,7 +150,7 @@ export function Status() {
   if (!snapshot.connected)
     return (
       <div className="notice offline" role="status">
-        Offline — showing saved standings. Reconnect before saving.
+        Offline. Showing saved standings. Reconnect before saving.
       </div>
     );
   return null;

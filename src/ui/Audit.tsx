@@ -111,8 +111,8 @@ export function describeAuditEntry(entry: AuditEntry, state: ConferenceState): s
       const invalidated = before?.valid === true && after?.valid === false;
       const restored = before?.valid === false && after?.valid === true;
       const validity = invalidated || restored
-        ? invalidated ? " · invalidated" : " · restored"
-        : after?.valid === false ? " · invalid" : "";
+        ? invalidated ? " (invalidated)" : " (restored)"
+        : after?.valid === false ? " (invalid)" : "";
       return `${event?.name ?? "Event"} · ${person}: ${value}${validity}`;
     }
     case "identity":

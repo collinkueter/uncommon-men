@@ -45,7 +45,7 @@ import type {
   Participant,
 } from "@/domain/types";
 import { log } from "@/lib/logging/logger";
-import { createSeedState, DEMO_RECORDED_AT } from "./seed";
+import { DEMO_RECORDED_AT } from "./demoClock";
 
 const IDENTITY_KEY = "uncommon-men.identity";
 const DEMO_IDENTITY_KEY = "uncommon-men.demo-identity";
@@ -224,7 +224,7 @@ abstract class BaseStore implements ConferenceStore {
 }
 
 class DemoStore extends BaseStore {
-  constructor() {
+  constructor(createSeedState: () => ConferenceState) {
     let data = createSeedState();
     try {
       const saved = localStorage.getItem(DEMO_KEY);
@@ -1563,9 +1563,14 @@ function friendlyFirebaseError(error: FirebaseError): string {
   return "The live conference service could not complete this action. Try again.";
 }
 
-export function createConferenceStore(): ConferenceStore {
-  return typeof window !== "undefined" &&
+export async function createConferenceStore(): Promise<ConferenceStore> {
+  if (
+    typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("demo") === "1"
-    ? new DemoStore()
-    : new FirebaseStore();
+  ) {
+    // Sample data is only needed for ?demo=1, so live visitors never download it.
+    const { createSeedState } = await import("./seed");
+    return new DemoStore(createSeedState);
+  }
+  return new FirebaseStore();
 }

@@ -13,6 +13,7 @@ vi.mock("./shared", () => ({
   PageShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
   Button: (props: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
   withDemo: (path: string) => path,
+  useMediaQuery: () => false,
 }));
 
 function renderBracket(eventId = "chess") {

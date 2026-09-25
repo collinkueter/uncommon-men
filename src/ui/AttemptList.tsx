@@ -1,5 +1,5 @@
 import { formatScore, getBestAttempt, normalizeName } from "@/domain/ranking";
-import type { Attempt, ConferenceState } from "@/domain/types";
+import type { AppSnapshot, Attempt, ConferenceState } from "@/domain/types";
 import { Empty } from "./shared";
 import "./Results.css";
 
@@ -13,6 +13,15 @@ export function participantIdForName(
   return state.participants.find((participant) =>
     normalizeName(participant.name) === normalized,
   )?.id;
+}
+
+// A device that lost its sign-in session gets a new identity without a
+// participant link; fall back to the remembered name so history still shows.
+export function myParticipantId(snapshot: AppSnapshot): string | undefined {
+  return (
+    snapshot.identity?.participantId ??
+    participantIdForName(snapshot.data, snapshot.identity?.name ?? "")
+  );
 }
 
 export function getAttemptsForEventParticipant(

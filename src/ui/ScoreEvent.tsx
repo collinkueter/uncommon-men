@@ -23,6 +23,12 @@ export function ScoreEvent() {
   const { eventId = "" } = useParams();
   const { snapshot } = useConference();
   const event = snapshot.data.events.find((e) => e.id === eventId);
+  if (snapshot.loading)
+    return (
+      <PageShell>
+        <div className="route-pending" aria-busy="true" aria-label="Loading event" />
+      </PageShell>
+    );
   if (!event || !event.active)
     return (
       <PageShell>
@@ -294,7 +300,7 @@ function ScoreForm({ event }: { event: Competition }) {
               {running
                 ? "RUNNING"
                 : elapsed
-                  ? "STOPPED — review before saving"
+                  ? "STOPPED. Review before saving."
                   : "minutes : seconds . hundredths"}
             </small>
             {(running || elapsed === 0) && <Button
@@ -365,7 +371,7 @@ function ScoreForm({ event }: { event: Competition }) {
         >
           {saving ? "Saving…" : "Save attempt"}
         </Button>
-        {message && <p className="form-message" role="status">{message}</p>}
+        {message && <p key={message} className={`form-message ${message.startsWith("Attempt saved") ? "saved" : ""}`} role="status">{message}</p>}
         <button
           type="button"
           className="underline attempt-toggle"

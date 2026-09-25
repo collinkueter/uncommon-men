@@ -422,12 +422,12 @@ export function Admin() {
                       { value: "", label: "Select an attempt" },
                       ...snapshot.data.attempts.map((a) => ({
                         value: a.id,
-                        label: `${snapshot.data.events.find((x) => x.id === a.eventId)?.name} · ${snapshot.data.participants.find((p) => p.id === a.participantId)?.name} · ${(() => {
+                        label: `${snapshot.data.events.find((x) => x.id === a.eventId)?.name}: ${snapshot.data.participants.find((p) => p.id === a.participantId)?.name}, ${(() => {
                           const event = snapshot.data.events.find(
                             (x) => x.id === a.eventId,
                           );
                           return event ? formatScore(a.value, event) : a.value;
-                        })()} · ${new Date(a.createdAt).toLocaleString()}`,
+                        })()} (${new Date(a.createdAt).toLocaleString()})`,
                       })),
                     ]}
                   />
