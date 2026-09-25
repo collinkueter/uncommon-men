@@ -270,6 +270,17 @@ class DemoStore extends BaseStore {
           participantId: command.participantId,
         };
         if (!identity.name) throw new Error("Enter your name.");
+        if (!identity.participantId) {
+          const normalizedName = normalizeName(identity.name);
+          let participant = data.participants.find(
+            (item) => item.normalizedName === normalizedName,
+          );
+          if (!participant) {
+            participant = { id: randomId(), name: identity.name, normalizedName };
+            data.participants.push(participant);
+          }
+          identity.participantId = participant.id;
+        }
         localStorage.setItem(
           DEMO_IDENTITY_KEY,
           JSON.stringify({
@@ -751,7 +762,7 @@ class FirebaseStore extends BaseStore {
       if (revision !== this.authRevision) return;
       const remembered = readRememberedIdentity();
       const identityRef = doc(this.db!, "identities", user.uid);
-      let identityDocument = await getDoc(identityRef);
+      const identityDocument = await getDoc(identityRef);
       if (revision !== this.authRevision) return;
       let identity: Identity = {
         uid: user.uid,
@@ -766,26 +777,26 @@ class FirebaseStore extends BaseStore {
       };
       this.snapshot = { ...this.snapshot, identity };
       if (identityDocument.exists()) this.emit();
-      if (!identityDocument.exists() && identity.name) {
-        const initialName = identity.name;
-        await this.auditedWrite(
-          `identities/${user.uid}`,
-          "identity",
-          "Identity initialized",
-          () => ({
-            uid: user.uid,
-            name: initialName,
-            participantId: null,
-          }),
-          undefined,
-          initialName,
-        );
-        if (revision !== this.authRevision) return;
-        identityDocument = await getDoc(identityRef);
-        if (revision !== this.authRevision) return;
-        identity = { ...identity, name: initialName, participantId: undefined };
-        this.snapshot = { ...this.snapshot, identity };
-        this.emit();
+      // A new account with a remembered name, or a name saved before names
+      // joined the roster, gets its roster record now.
+      if (identity.name && !identity.participantId) {
+        try {
+          const participantId = await this.saveIdentityWithParticipant(
+            user.uid,
+            identity.name,
+            undefined,
+          );
+          if (revision !== this.authRevision) return;
+          identity = { ...identity, participantId };
+          rememberIdentity(identity);
+          this.snapshot = { ...this.snapshot, identity };
+          this.emit();
+        } catch (error) {
+          if (!identityDocument.exists()) throw error;
+          log.warn("Could not add a named identity to the roster", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
       this.identityUnsubscribe = onSnapshot(
         identityRef,
@@ -890,6 +901,74 @@ class FirebaseStore extends BaseStore {
       });
     });
   }
+  // Entering a name puts that person on the conference roster, so teammates
+  // can pick them for a team right away. An existing record with the same
+  // name is linked rather than duplicated.
+  private async saveIdentityWithParticipant(
+    uid: string,
+    name: string,
+    participantId: string | undefined,
+  ): Promise<string> {
+    const db = this.requireReady().db;
+    const normalizedName = normalizeName(name);
+    const existingId =
+      participantId ??
+      this.snapshot.data.participants.find(
+        (item) => item.normalizedName === normalizedName,
+      )?.id;
+    const id = existingId ?? (await participantDocumentId(normalizedName));
+    const identityRef = doc(db, "identities", uid);
+    const participantRef = doc(db, "participants", id);
+    const identityAuditRef = doc(db, "audit", randomId());
+    const participantAuditRef = doc(db, "audit", randomId());
+    await retryOnRace(() =>
+      runTransaction(db, async (transaction) => {
+        const identitySnapshot = await transaction.get(identityRef);
+        const participantSnapshot = existingId
+          ? null
+          : await transaction.get(participantRef);
+        const at = serverTimestamp();
+        if (participantSnapshot && !participantSnapshot.exists()) {
+          const participantAfter = {
+            name,
+            normalizedName,
+            auditId: participantAuditRef.id,
+          };
+          transaction.set(participantRef, participantAfter);
+          transaction.set(participantAuditRef, {
+            action: "addParticipant",
+            entityType: "participants",
+            entityId: id,
+            actorUid: uid,
+            actorName: name,
+            at,
+            before: null,
+            after: participantAfter,
+            reason: "Joined the roster by entering a name",
+          });
+        }
+        const identityAfter = {
+          uid,
+          name,
+          participantId: id,
+          auditId: identityAuditRef.id,
+        };
+        transaction.set(identityRef, identityAfter);
+        transaction.set(identityAuditRef, {
+          action: "identity",
+          entityType: "identities",
+          entityId: uid,
+          actorUid: uid,
+          actorName: name,
+          at,
+          before: identitySnapshot.exists() ? identitySnapshot.data() : null,
+          after: identityAfter,
+          reason: "Identity updated",
+        });
+      }),
+    );
+    return id;
+  }
   async execute(command: Command) {
     if (this.snapshot.error && this.snapshot.error !== CATALOG_SETUP_ERROR) {
       this.snapshot = { ...this.snapshot, error: null };
@@ -904,17 +983,10 @@ class FirebaseStore extends BaseStore {
           participantId: command.participantId,
         };
         if (!identity.name) throw new Error("Enter your name.");
-        await this.auditedWrite(
-          `identities/${actor.uid}`,
-          "identity",
-          "Identity updated",
-          () => ({
-            uid: actor.uid,
-            name: identity.name,
-            participantId: identity.participantId || null,
-          }),
-          undefined,
+        identity.participantId = await this.saveIdentityWithParticipant(
+          actor.uid,
           identity.name,
+          identity.participantId,
         );
         rememberIdentity(identity);
         this.snapshot = { ...this.snapshot, identity };

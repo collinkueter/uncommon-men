@@ -268,6 +268,31 @@ describe("Firestore conference rules", () => {
     );
   });
 
+  it("lets a first-time visitor save a name and join the roster in one write", async () => {
+    const db = environment.authenticatedContext("new-visitor").firestore();
+    const identityRef = doc(db, "identities", "new-visitor");
+    const participantRef = doc(db, "participants", "name-collin");
+    const participantAuditRef = doc(db, "audit", "join-participant-audit");
+    const identityAuditRef = doc(db, "audit", "join-identity-audit");
+    const at = serverTimestamp();
+    const participantAfter = { name: "Collin", normalizedName: "collin", auditId: participantAuditRef.id };
+    const identityAfter = { uid: "new-visitor", name: "Collin", participantId: participantRef.id, auditId: identityAuditRef.id };
+    const batch = writeBatch(db);
+    batch.set(participantRef, participantAfter);
+    batch.set(participantAuditRef, {
+      action: "addParticipant", entityType: "participants", entityId: participantRef.id,
+      actorUid: "new-visitor", actorName: "Collin", at, before: null, after: participantAfter,
+      reason: "Joined the roster by entering a name",
+    });
+    batch.set(identityRef, identityAfter);
+    batch.set(identityAuditRef, {
+      action: "identity", entityType: "identities", entityId: "new-visitor",
+      actorUid: "new-visitor", actorName: "Collin", at, before: null, after: identityAfter,
+      reason: "Identity updated",
+    });
+    await assertSucceeds(batch.commit());
+  });
+
   it("allows first result to create participant and link the recorder identity atomically", async () => {
     const db = environment.authenticatedContext("recorder-1").firestore();
     const identityRef = doc(db, "identities", "recorder-1");
