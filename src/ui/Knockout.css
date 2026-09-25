@@ -17,3 +17,8 @@
 .knockout-correction label { display: grid; gap: .35rem; margin-top: 1rem; font-weight: 600; }
 .knockout-correction textarea { min-height: 100px; }
 @media (max-width: 760px) { .knockout-panel { padding: 1rem; } }
+.knockout-panel .signup-done { display: flex; align-items: center; gap: .45rem; color: var(--color-text); }
+.knockout-panel .signup-done svg { flex: 0 0 18px; width: 18px; color: var(--color-accent); }
+.knockout-others { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-border-subtle); }
+.knockout-others summary { cursor: pointer; font-weight: 700; color: var(--color-muted); padding: .6rem 0; }
+.knockout-others[open] summary { margin-bottom: .5rem; }

@@ -10,6 +10,7 @@ import "./Knockout.css";
 export function Knockout({ event }: { event: Competition }) {
   const { snapshot, execute } = useConference();
   const game = snapshot.data.games?.find((item) => item.eventId === event.id);
+  const myId = snapshot.identity?.participantId;
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -34,8 +35,8 @@ export function Knockout({ event }: { event: Competition }) {
       return false;
     }
   };
-  const join = async () => {
-    const pending = selected.filter((id) => !game?.entrants.includes(id));
+  const signUp = async (ids: string[]) => {
+    const pending = ids.filter((id) => !game?.entrants.includes(id));
     if (!pending.length || saving) return;
     setSaving(true);
     setMessage("");
@@ -46,7 +47,8 @@ export function Knockout({ event }: { event: Competition }) {
         setSelected((current) => current.filter((id) => id !== participantId));
         joined += 1;
       }
-      setMessage(`${joined} entrant${joined === 1 ? "" : "s"} signed up.`);
+      // Your own signup is confirmed in place, so only report others.
+      if (!(pending.length === 1 && pending[0] === myId)) setMessage(`${joined} entrant${joined === 1 ? "" : "s"} signed up.`);
     } catch {
       setMessage(joined ? `${joined} entrant${joined === 1 ? "" : "s"} signed up. One or more could not be saved.` : "Could not save that signup. Try again.");
     } finally {
@@ -101,19 +103,31 @@ export function Knockout({ event }: { event: Competition }) {
         {(!game || game.status === "registration") && (
           <section className="knockout-panel" aria-labelledby="knockout-signup-title">
             <h2 id="knockout-signup-title">SIGN UP</h2>
-            <p>Choose a person to add to the saved entrant roster. Registration closes when an administrator starts the game.</p>
-            <ParticipantPicker
-              id={`game-participant-${event.id}`}
-              label="Participant"
-              participants={snapshot.data.participants.filter((participant) => !entrants.includes(participant.id))}
-              selected={selected}
-              max={0}
-              onChange={setSelected}
-              onCreate={addParticipant}
-            />
-            <Button className="primary" type="button" disabled={!selected.length || saving} onClick={() => void join()}>
-              {saving ? "Saving…" : "Join game"}
-            </Button>
+            <p>Registration closes when an administrator starts the game.</p>
+            {!snapshot.identity?.name.trim() ? (
+              <p><Link to={withDemo(`/welcome?next=${encodeURIComponent(`/events/${event.id}`)}`)}>Enter your name</Link> to sign up.</p>
+            ) : myId && entrants.includes(myId) ? (
+              <p className="signup-done"><CheckCircle2 aria-hidden="true" /><span>You're signed up as <strong>{names.get(myId)}</strong>.</span></p>
+            ) : myId ? (
+              <Button className="primary" type="button" disabled={saving} onClick={() => void signUp([myId])}>
+                {saving ? "Signing up…" : `Sign me up as ${names.get(myId) ?? snapshot.identity.name}`}
+              </Button>
+            ) : null}
+            <details className="knockout-others" open={Boolean(snapshot.identity?.name.trim()) && !myId}>
+              <summary>Sign up someone else</summary>
+              <ParticipantPicker
+                id={`game-participant-${event.id}`}
+                label="Participants"
+                participants={snapshot.data.participants.filter((participant) => !entrants.includes(participant.id))}
+                selected={selected}
+                max={0}
+                onChange={setSelected}
+                onCreate={addParticipant}
+              />
+              <Button type="button" disabled={!selected.length || saving} onClick={() => void signUp(selected)}>
+                {saving ? "Saving…" : "Sign up selected"}
+              </Button>
+            </details>
             {entrants.length > 0 && <EntrantRoster entrants={entrants} names={names} />}
             {snapshot.identity?.admin && <Button type="button" className="knockout-start" disabled={entrants.length < 2 || saving} onClick={() => void start()}><Play /> Start game</Button>}
           </section>

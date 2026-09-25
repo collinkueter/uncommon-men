@@ -75,8 +75,8 @@ describe("bracket presentation", () => {
     const html = renderBracket("carpet-ball");
     expect(html).toContain('id="bracket-entrants"');
     expect(html).toContain("OPEN REGISTRATION");
-    expect(html).toContain("Aaron Davis");
-    expect(html).toContain("Caleb Johnson");
+    expect(html).toContain(context.snapshot.data.participants[0].name);
+    expect(html).toContain(context.snapshot.data.participants[1].name);
     expect(html).not.toContain("Save winner");
   });
 

@@ -38,11 +38,6 @@
   min-width: 0;
 }
 
-.competitor button {
-  min-height: var(--control-height);
-  flex: 0 0 auto;
-}
-
 .value-input {
   gap: 0.65rem;
 }
@@ -103,10 +98,6 @@
 @media (max-width: 480px) {
   .welcome .primary {
     padding-inline: 0.9rem;
-  }
-
-  .competitor button {
-    padding-inline: 0.8rem;
   }
 }
 

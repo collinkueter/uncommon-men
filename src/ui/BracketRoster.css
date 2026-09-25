@@ -32,27 +32,33 @@
 .team-registration .bracket-field { margin: 0; }
 .participant-picker { display: grid; gap: 0.5rem; }
 .participant-picker .bracket-field { margin: 0; }
-.participant-picker input[type="search"] { min-height: 46px; }
 .picker-status { margin: 0; color: var(--color-muted); font-size: 0.86rem; }
-.roster-checks { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; }
-.roster-checks .check:has(input:disabled) { color: var(--color-muted); cursor: default; }
-.picker-empty { margin: 0.5rem 0; color: var(--color-muted); }
-.picker-create {
-  display: flex;
+.picker-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.5rem; padding: 0; list-style: none; }
+.picker-chips li {
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 44px;
-  padding: 0.5rem 0.85rem;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-md);
+  gap: 0.2rem;
+  padding: 0 0.2rem 0 0.8rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+}
+.picker-chips button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
   background: transparent;
-  color: var(--color-accent);
-  font: inherit;
-  text-align: left;
+  color: var(--color-muted);
   cursor: pointer;
 }
-.picker-create svg { flex: 0 0 18px; width: 18px; height: 18px; }
-.picker-create:disabled { opacity: 0.6; cursor: progress; }
+.picker-chips button:hover { color: var(--color-text); }
+.picker-chips svg { width: 16px; height: 16px; }
+.competitor-suggestions .picker-empty { color: var(--color-muted); cursor: default; }
+.participant-picker input:disabled { opacity: 0.7; }
 .roster-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .roster-actions .button { flex: 1 1 150px; }
 .registered-team {

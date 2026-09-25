@@ -388,45 +388,68 @@ a:focus-visible {
   white-space: pre-line;
 }
 .competitor {
+  position: relative;
   display: flex;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  overflow: hidden;
 }
 .competitor:focus-within {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-.competitor input:focus, .competitor button:focus-visible {
-  outline-offset: -3px;
+.competitor.open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.competitor input:focus {
+  outline: none;
 }
 .competitor input {
+  flex: 1;
   border: 0;
-  border-radius: 0;
+  border-radius: inherit;
   background: var(--color-surface-raised);
 }
-.competitor button {
-  padding: 0 1rem;
-  border: 0;
-  border-left: 1px solid var(--color-border-subtle);
+.competitor-suggestions {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: -1px;
+  right: -1px;
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 0.3rem 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-top-color: var(--color-border-subtle);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: var(--color-surface-raised);
-  color: var(--color-accent);
-  font: 700 1rem var(--font-body);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.45);
 }
-.inline-matches {
+.competitor-suggestions li {
   display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-.inline-matches button {
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-raised);
-  color: var(--color-text);
-  border-radius: var(--radius-pill);
-  padding: 0.35rem 0.7rem;
+  align-items: center;
+  gap: 0.75rem;
   min-height: 44px;
-  font: inherit;
+  padding: 0.45rem 1rem;
+  color: var(--color-text);
+  cursor: pointer;
 }
+.competitor-suggestions li svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--color-muted);
+}
+.competitor-suggestions li.active {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-raised));
+}
+.competitor-suggestions li.current { font-weight: 700; }
+.competitor-suggestions .current-mark { margin-left: auto; color: var(--color-accent); }
+.competitor-suggestions .new-competitor { border-top: 1px solid var(--color-border-subtle); }
+.competitor-suggestions .new-competitor svg { color: var(--color-accent); }
 .recorded {
   font-size: 0.86rem;
 }

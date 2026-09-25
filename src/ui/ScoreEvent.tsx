@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Play, Square } from "lucide-react";
+import { ArrowLeft, Check, Play, Search, Square, UserPlus } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
 import { formatScore, getBestAttempt, normalizeName } from "@/domain/ranking";
 import type { Competition } from "@/domain/types";
@@ -110,16 +110,37 @@ function ScoreForm({ event }: { event: Competition }) {
   const competitorId = `competitor-${event.id}`;
   const manualValueId = `manual-value-${event.id}`;
   const participants = snapshot.data.participants;
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [typed, setTyped] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  // Until the user types, the list shows everyone so they can switch competitor.
   const matches = useMemo(() => {
-    const query = normalizeName(name);
-    if (!query) return [];
-    return participants
-      .filter((p) => {
-        const candidate = p.normalizedName || normalizeName(p.name);
-        return candidate.includes(query) && candidate !== query;
-      })
-      .slice(0, 4);
-  }, [participants, name]);
+    const query = typed ? normalizeName(name) : "";
+    const scored = participants
+      .map((p) => ({ p, candidate: p.normalizedName || normalizeName(p.name) }))
+      .filter(({ candidate }) => !query || candidate.includes(query))
+      .sort((a, b) => Number(b.candidate.startsWith(query)) - Number(a.candidate.startsWith(query)) || a.p.name.localeCompare(b.p.name));
+    return scored.map(({ p }) => p).slice(0, 50);
+  }, [participants, name, typed]);
+  const exactMatch = participants.some((p) => (p.normalizedName || normalizeName(p.name)) === normalizeName(name));
+  const showNew = typed && Boolean(name.trim()) && !exactMatch;
+  const optionCount = matches.length + (showNew ? 1 : 0);
+  const listOpen = suggestOpen && optionCount > 0;
+  const listId = `${competitorId}-list`;
+  const optionId = (index: number) => `${listId}-${index}`;
+  const chooseParticipant = (p: (typeof participants)[number]) => {
+    setName(p.name);
+    setParticipantId(p.id);
+    setSuggestOpen(false);
+    setTyped(false);
+    setActiveIndex(-1);
+  };
+  const keepTypedName = () => {
+    setName(name.trim());
+    setSuggestOpen(false);
+    setTyped(false);
+    setActiveIndex(-1);
+  };
   useEffect(() => {
     if (!running || !startedAt) return;
     const id = window.setInterval(
@@ -237,44 +258,87 @@ function ScoreForm({ event }: { event: Competition }) {
         )}
         <div className="entry-field competitor-field">
           <label htmlFor={competitorId}>Competing</label>
-          <div className="competitor">
+          <div className={`competitor ${listOpen ? "open" : ""}`}>
             <input
               id={competitorId}
               ref={competitorInput}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={listOpen}
+              aria-controls={listId}
+              aria-activedescendant={listOpen && activeIndex >= 0 ? optionId(activeIndex) : undefined}
               aria-describedby="competitor-recorder"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Search or type a name"
               value={name}
+              onFocus={(e) => {
+                e.currentTarget.select();
+                setTyped(false);
+                setActiveIndex(-1);
+                setSuggestOpen(true);
+              }}
+              onClick={() => setSuggestOpen(true)}
+              onBlur={() => setSuggestOpen(false)}
               onChange={(e) => {
                 setName(e.target.value);
                 setParticipantId(undefined);
+                setTyped(true);
+                setActiveIndex(e.target.value.trim() ? 0 : -1);
+                setSuggestOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  if (!listOpen) { setSuggestOpen(true); return; }
+                  const step = e.key === "ArrowDown" ? 1 : -1;
+                  setActiveIndex((current) => (current + step + optionCount) % optionCount);
+                } else if (e.key === "Enter" && listOpen) {
+                  e.preventDefault();
+                  if (activeIndex >= 0 && activeIndex < matches.length) chooseParticipant(matches[activeIndex]);
+                  else keepTypedName();
+                } else if (e.key === "Escape" && listOpen) {
+                  e.preventDefault();
+                  setSuggestOpen(false);
+                }
               }}
             />
-            <button
-              type="button"
-              onClick={() => {
-                competitorInput.current?.focus();
-                competitorInput.current?.select();
-              }}
-            >
-              Change
-            </button>
+            {listOpen && (
+              <ul className="competitor-suggestions" id={listId} role="listbox" aria-label="Competitors">
+                {matches.map((p, index) => (
+                  <li
+                    key={p.id}
+                    id={optionId(index)}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={`${index === activeIndex ? "active" : ""} ${p.id === participantId ? "current" : ""}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => chooseParticipant(p)}
+                  >
+                    <Search aria-hidden="true" />
+                    <span>{p.name}</span>
+                    {p.id === participantId && <Check aria-hidden="true" className="current-mark" />}
+                  </li>
+                ))}
+                {showNew && (
+                  <li
+                    id={optionId(matches.length)}
+                    role="option"
+                    aria-selected={activeIndex === matches.length}
+                    className={`new-competitor ${activeIndex === matches.length ? "active" : ""}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setActiveIndex(matches.length)}
+                    onClick={keepTypedName}
+                  >
+                    <UserPlus aria-hidden="true" />
+                    <span>New competitor: <strong>{name.trim()}</strong></span>
+                  </li>
+                )}
+              </ul>
+            )}
           </div>
         </div>
-        {matches.length > 0 && (
-          <div className="inline-matches">
-            {matches.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => {
-                  setName(p.name);
-                  setParticipantId(p.id);
-                }}
-              >
-                {p.name}
-              </button>
-            ))}
-          </div>
-        )}
         <p className="recorded" id="competitor-recorder">
           Recorded by {snapshot.identity?.name}
         </p>

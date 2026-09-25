@@ -31,9 +31,27 @@ describe("knockout presentation", () => {
     context.snapshot.data.games = [];
     const html = renderGame();
     expect(html).toContain("SIGN UP");
-    expect(html).toContain("Join game");
+    expect(html).toContain("Sign up someone else");
     expect(html).not.toContain("Start bracket");
     expect(html).not.toContain("BRACKET");
+  });
+
+  it("defaults signup to the viewer and confirms it once registered", () => {
+    const me = context.snapshot.data.participants[3];
+    context.snapshot.identity!.participantId = me.id;
+    expect(renderGame()).toContain(`Sign me up as ${me.name}`);
+    context.snapshot.data.games[0].entrants.push(me.id);
+    const html = renderGame();
+    expect(html).not.toContain("Sign me up");
+    expect(html).toContain("You&#x27;re signed up as");
+    expect(html).not.toContain("Start game");
+  });
+
+  it("does not list the whole roster until someone searches", () => {
+    const html = renderGame();
+    const unregistered = context.snapshot.data.participants.find((p) => !context.snapshot.data.games[0].entrants.includes(p.id))!;
+    expect(html).not.toContain(unregistered.name);
+    expect(html).toContain('role="combobox"');
   });
 
   it("shows a saved roster and a single winner choice while active", () => {
