@@ -10,8 +10,10 @@ import {
 import { useConference } from "@/lib/ConferenceContext";
 import { conferencePath, relativeConferencePath } from "@/lib/conferencePaths";
 import type { Competition } from "@/domain/types";
+import { ConferenceSwitcher } from "./ConferenceSwitcher";
 import "./styles.css";
 import "./Profile.css";
+import "./Platform.css";
 export { Audit } from "./Audit";
 
 export const nowId = () =>
@@ -108,7 +110,16 @@ export function PageShell({
   return (
     <main className={bare ? "presentation-shell" : "app-shell"}>
       <header className={`topbar ${bare ? "presentation-topbar" : ""}`}>
-          <Brand />
+          <div className="brand-block">
+            <Brand />
+            {snapshot.conference && (
+              <ConferenceSwitcher
+                conferenceId={snapshot.conferenceId}
+                name={snapshot.conference.name}
+                organizer={Boolean(snapshot.identity?.organizer)}
+              />
+            )}
+          </div>
           <button
             className="mobile-menu"
             onClick={() => setMenu(!menu)}
@@ -128,6 +139,9 @@ export function PageShell({
             <Link to={link("/results")}>My results</Link>
             {snapshot.identity?.admin && (
               <Link to={link("/admin")}>Admin</Link>
+            )}
+            {snapshot.identity?.organizer && (
+              <Link to={withDemo("/organizer")}>Organizer</Link>
             )}
           </nav>
           <div className="identity profile-identity">

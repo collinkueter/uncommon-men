@@ -1,0 +1,471 @@
+/* Conference directory, conference switcher and organizer area. */
+.muted {
+  color: var(--color-muted);
+}
+.brand-block {
+  display: grid;
+  justify-items: start;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.conference-switcher {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+.conference-switcher > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 0.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: 700 0.8rem / 1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.conference-switcher > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conference-switcher > button svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.conference-switcher > button:hover,
+.conference-switcher > button[aria-expanded="true"] {
+  color: var(--color-accent);
+}
+.conference-switcher ul {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: var(--z-menu);
+  width: min(320px, calc(100vw - 2rem));
+  max-height: min(420px, 70dvh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.conference-switcher li.muted {
+  padding: 0.7rem 0.8rem;
+}
+.conference-switcher li a {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  text-decoration: none;
+}
+.conference-switcher li a:hover,
+.conference-switcher li a[aria-current="page"] {
+  background: var(--color-accent-surface);
+}
+.conference-switcher li a span {
+  flex: 1;
+  min-width: 0;
+}
+.conference-switcher li a small {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.conference-switcher li a svg {
+  width: 16px;
+  color: var(--color-accent);
+}
+.conference-switcher li.all {
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.conference-switcher li.all a {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* Directory */
+.directory-lede {
+  color: var(--color-muted);
+  font-size: 1.18rem;
+  margin: 0 0 1.5rem;
+}
+.directory-section {
+  margin-top: 2.25rem;
+}
+.directory-section h2 {
+  font: 800 1.35rem / 1 var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin: 0 0 0.9rem;
+}
+.directory-note {
+  color: var(--color-muted);
+  margin: -0.4rem 0 0.9rem;
+  font-size: var(--text-sm);
+}
+.conference-list {
+  display: grid;
+  gap: 0.75rem;
+}
+.conference-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 84px;
+  padding: 1rem 1.15rem;
+  color: var(--color-text);
+  text-decoration: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--duration-fast),
+    transform var(--duration-fast) var(--ease-out);
+}
+.conference-card.archived {
+  border-left-color: var(--color-border-strong);
+}
+.conference-card.draft {
+  border-left-color: var(--color-warning);
+  border-style: dashed solid dashed solid;
+}
+.conference-card:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-1px);
+}
+.conference-card > div {
+  flex: 1;
+  min-width: 0;
+}
+.conference-card strong {
+  display: block;
+  font: 800 1.55rem / 1.05 var(--font-display);
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.conference-card small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.4rem;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+.conference-card small span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.conference-card small svg {
+  width: 15px;
+  height: 15px;
+}
+.conference-card .chevron {
+  flex: none;
+  color: var(--color-accent);
+}
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font: 700 var(--text-xs) / 1.2 var(--font-body);
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.status-badge.live {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.status-badge.draft {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+.status-badge.default {
+  color: var(--color-accent);
+  border-color: var(--color-accent-line);
+}
+.directory-empty {
+  color: var(--color-muted);
+  margin-top: 2rem;
+}
+.directory-organizer {
+  margin-top: 3rem;
+}
+.directory-organizer a {
+  color: var(--color-accent);
+}
+
+/* Organizer area and conference settings */
+.button.compact {
+  min-height: 44px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+.admin-main .button svg,
+.created-panel .button svg {
+  width: 18px;
+  height: 18px;
+  vertical-align: -3px;
+}
+.admin-main a.button,
+.created-panel a.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+.button.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+.new-conference fieldset,
+.conference-details fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.signed-in-as {
+  margin: 0 0 0.5rem;
+  font-size: var(--text-sm);
+}
+.organizer-list {
+  display: grid;
+  gap: 0.9rem;
+  margin: 1.5rem 0;
+}
+.organizer-conference {
+  padding: 1rem 1.15rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+.organizer-conference > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.organizer-conference strong {
+  display: block;
+  font: 800 1.4rem / 1.05 var(--font-display);
+  overflow-wrap: anywhere;
+}
+.organizer-conference small {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.organizer-conference .badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.organizer-conference .role-manager,
+.organizer-conference .conference-details {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.role-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+.role-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 56px;
+  padding: 0.4rem 0.4rem 0.4rem 1rem;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+.role-list li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.role-list li.muted {
+  padding: 1rem;
+}
+.role-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+.admin .role-add label {
+  flex: 1 1 260px;
+  margin: 0;
+}
+.role-add label input {
+  margin-top: 0.5rem;
+}
+.role-add .button {
+  min-height: var(--control-height);
+}
+.role-help,
+.field-help {
+  display: block;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  margin-top: 0.5rem;
+}
+.field-error {
+  display: block;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  margin-top: 0.5rem;
+}
+.slug-input {
+  display: flex;
+  align-items: center;
+  margin-top: 0.65rem;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.slug-input:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.slug-input > span {
+  padding-left: 0.85rem;
+  color: var(--color-muted);
+}
+.admin-grid .slug-input input {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  padding-left: 0.2rem;
+}
+.slug-input input:focus {
+  outline: none;
+}
+.new-conference h2,
+.admin-main .role-manager + h2 {
+  margin: 2.25rem 0 0.75rem;
+  font: 800 1.35rem / 1 var(--font-display);
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+.new-conference .segment {
+  max-width: 420px;
+  margin-bottom: 0.6rem;
+}
+.event-picker {
+  margin-top: 1rem;
+}
+.event-group {
+  margin: 0.75rem 0;
+  padding: 0.4rem 1rem 0.6rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.event-group legend {
+  padding: 0 0.4rem;
+  font: 800 1rem var(--font-display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.event-group .check {
+  display: flex !important;
+}
+.created-panel code,
+.role-help code,
+.admin-main code {
+  font-size: 0.92em;
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+}
+.conference-status-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.form-message.centered {
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .brand-block {
+    gap: 0;
+  }
+  .topbar .brand-block .brand i {
+    margin: 3px 8%;
+  }
+  .conference-switcher > button {
+    min-height: 24px;
+    font-size: 0.72rem;
+  }
+  .conference-card strong {
+    font-size: 1.35rem;
+  }
+  .organizer-conference > header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .organizer-conference .badges {
+    justify-content: flex-start;
+  }
+  .row-actions .button {
+    flex: 1 1 calc(50% - 0.5rem);
+    justify-content: center;
+  }
+  .role-add .button {
+    width: 100%;
+    justify-content: center;
+  }
+  .admin.organizer > aside {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

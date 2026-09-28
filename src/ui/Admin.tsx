@@ -1,13 +1,18 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Building2,
   CalendarDays,
   Clock3,
   FileText,
   QrCode,
+  Settings,
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { statusAction } from "@/domain/conferences";
+import { usePlatform } from "@/lib/PlatformContext";
+import { ConferenceAdmins, ConferenceDetailsForm } from "./ConferenceManagement";
 import { useConference } from "@/lib/ConferenceContext";
 import { formatScore } from "@/domain/ranking";
 import type {
@@ -16,7 +21,7 @@ import type {
   Competition,
   ConferenceStore,
 } from "@/domain/types";
-import { Audit, Button, PageShell, nowId, useConferenceLink } from "./shared";
+import { Audit, Button, PageShell, nowId, useConferenceLink, withDemo } from "./shared";
 import { ThemedSelect } from "./ThemedSelect";
 
 function AdminParticipants({
@@ -292,11 +297,65 @@ function AdminEvents({
     </>
   );
 }
+/** Conference details for its admins; status and admins for organizers. */
+function AdminConference({ snapshot }: { snapshot: AppSnapshot }) {
+  const { store } = usePlatform();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const conference = snapshot.conference;
+  if (!conference) return null;
+  const organizer = Boolean(snapshot.identity?.organizer);
+  const archived = conference.status === "archived";
+  const next = statusAction(conference.status);
+  const changeStatus = async () => {
+    if (next.to === "archived" && !window.confirm(`Archive ${conference.name}? Its results become read-only.`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await store.updateConference(conference.id, { status: next.to });
+      setMessage(`${conference.name} is now ${next.to}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not change the status.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <h1>CONFERENCE</h1>
+      <p className="conference-status-line">
+        <em className={`status-badge ${conference.status}`}>{conference.status}</em>
+        <span className="muted">/c/{conference.id}</span>
+      </p>
+      {organizer ? (
+        <div className="form-actions">
+          <Button type="button" disabled={busy} onClick={() => void changeStatus()}>
+            {next.label}
+          </Button>
+          <Link className="button" to={withDemo("/organizer")}>
+            <Building2 aria-hidden="true" /> Organizer area
+          </Link>
+        </div>
+      ) : (
+        <p className="muted">Only organizers can publish, archive or unarchive a conference.</p>
+      )}
+      {message && <p className="form-message" role="status">{message}</p>}
+      <h2>DETAILS</h2>
+      {archived && !organizer && (
+        <p className="muted">This conference is archived, so its details are read-only.</p>
+      )}
+      <ConferenceDetailsForm key={conference.id} conference={conference} disabled={archived && !organizer} />
+      <h2>ADMINS</h2>
+      <ConferenceAdmins conference={conference} canManage={organizer} />
+    </>
+  );
+}
+
 export function Admin() {
   const link = useConferenceLink();
   const { snapshot, execute, signInAdmin, signOutAdmin } = useConference();
   const [tab, setTab] = useState<
-    "results" | "participants" | "events" | "audit"
+    "results" | "participants" | "events" | "conference" | "audit"
   >("results");
   const [selected, setSelected] = useState<Attempt | undefined>();
   const [value, setValue] = useState("");
@@ -382,6 +441,7 @@ export function Admin() {
               "results",
               "participants",
               "events",
+              "conference",
               "audit",
             ] as const
           ).map((t) => (
@@ -397,6 +457,8 @@ export function Admin() {
                 <Users />
               ) : t === "events" ? (
                 <CalendarDays />
+              ) : t === "conference" ? (
+                <Settings />
               ) : (
                 <Clock3 />
               )}
@@ -406,6 +468,11 @@ export function Admin() {
           <Link className="button" to={link("/admin/signs")}>
             <QrCode /> Event signs
           </Link>
+          {snapshot.identity.organizer && (
+            <Link className="button" to={withDemo("/organizer")}>
+              <Building2 /> Organizer
+            </Link>
+          )}
           <Button type="button" onClick={signOutAdmin}>Sign out</Button>
         </aside>
         <div className="admin-main">
@@ -505,6 +572,7 @@ export function Admin() {
           {tab === "events" && (
             <AdminEvents snapshot={snapshot} execute={execute} />
           )}
+          {tab === "conference" && <AdminConference snapshot={snapshot} />}
           {tab === "audit" && (
             <>
               <h1>AUDIT HISTORY</h1>

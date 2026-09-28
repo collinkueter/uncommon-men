@@ -7,6 +7,7 @@ import { Button, PageShell, useConferenceLink } from "./shared";
 import { Welcome } from "./Welcome";
 import { Events } from "./Events";
 import { RouteScroll } from "./RouteScroll";
+import { Directory } from "./Directory";
 
 // Welcome and Events are the two landing screens, so they ship in the main
 // chunk. Everything else loads when first opened.
@@ -24,6 +25,9 @@ const Admin = lazy(() =>
 );
 const Signs = lazy(() =>
   import("./Signs").then(({ Signs }) => ({ default: Signs })),
+);
+const Organizer = lazy(() =>
+  import("./Organizer").then(({ Organizer }) => ({ default: Organizer })),
 );
 
 function Deferred({ children }: { children: ReactNode }) {
@@ -98,8 +102,9 @@ function ConferenceRoute() {
 
 /**
  * Pre-multi-conference URLs (printed QR codes point at /events/<eventId>) keep
- * working: every path outside /c/ moves under the default conference with its
- * query string, so ?demo=1 survives.
+ * working: every path outside /c/ (other than the directory at / and
+ * /organizer) moves under the default conference with its query string, so
+ * ?demo=1 survives.
  */
 export function LegacyRedirect({ defaultConferenceId }: { defaultConferenceId?: string }) {
   const location = useLocation();
@@ -133,6 +138,15 @@ export function LegacyRedirect({ defaultConferenceId }: { defaultConferenceId?: 
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<Directory />} />
+      <Route
+        path="/organizer"
+        element={
+          <Suspense fallback={<main className="app-shell"><div className="route-pending" aria-busy="true" /></main>}>
+            <Organizer />
+          </Suspense>
+        }
+      />
       <Route path="/c/:slug/*" element={<ConferenceRoute />} />
       <Route path="*" element={<LegacyRedirect />} />
     </Routes>
