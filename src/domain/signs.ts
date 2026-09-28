@@ -1,6 +1,12 @@
 import type { Competition } from "./types";
 
 /**
+ * Printed QR codes must outlive the page they were printed from, so signs always
+ * point at the production site, never a preview channel or localhost.
+ */
+export const SIGN_ORIGIN = "https://uncommon-men.web.app";
+
+/**
  * Builds the URL a printed event sign's QR code should open. All URL
  * construction for signs lives here so the routing rewrite that adds
  * `/c/:slug/...` paths only has to change this one function.

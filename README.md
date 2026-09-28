@@ -154,7 +154,7 @@ After granting or revoking the custom claim, the user must sign out and sign in 
 
 ## Event signs
 
-Printed event signs are generated in the app, not maintained offline. An administrator opens `/admin/signs`, picks the active events to print (or "Print all"), optionally adds the conference poster, and prints with the browser's print dialog (Save as PDF works well) — one letter-size sign per page, each with a QR code generated in the browser that opens straight into that event. The sign content (name, category, how-to-play instructions, scoring summary, and the QR target) is derived live from the event catalog, so it always matches what administrators have configured.
+Printed event signs are generated in the app, not maintained offline. An administrator opens `/admin/signs`, picks the active events to print (or "Print all"), optionally adds the conference poster, and prints with the browser's print dialog (Save as PDF works well) — one letter-size sign per page, each with a QR code generated in the browser that opens straight into that event. The sign content (name, category, how-to-play instructions, scoring summary, and the QR target) is derived live from the event catalog, so it always matches what administrators have configured. QR codes always point at the production site (`https://uncommon-men.web.app/c/<slug>/events/<eventId>`), even when the page is printed from a preview channel or localhost.
 
 ## Design references
 

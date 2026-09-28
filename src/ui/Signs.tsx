@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import "@fontsource/barlow/latin-700.css";
 import { Printer, ShieldCheck } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
-import { conferenceSignUrl, eventSignUrl, scoringSummary } from "@/domain/signs";
+import { SIGN_ORIGIN, conferenceSignUrl, eventSignUrl, scoringSummary } from "@/domain/signs";
 import type { Competition } from "@/domain/types";
 import { Button, PageShell } from "./shared";
 import { SignQr } from "./SignQr";
@@ -183,8 +183,7 @@ export function Signs({
     setIncludePoster(true);
     setPendingPrint(true);
   };
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : "https://uncommon-men.web.app";
+  const origin = SIGN_ORIGIN;
   const selectedEvents = activeEvents.filter((event) => selected.has(event.id));
   const nothingToPrint = selectedEvents.length === 0 && !includePoster;
 

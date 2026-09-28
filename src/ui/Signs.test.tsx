@@ -81,6 +81,21 @@ describe("Signs", () => {
     );
   });
 
+  it("prints production URLs even when opened from a preview channel or localhost", () => {
+    for (const origin of ["https://uncommon-men--review-bnh40gxr.web.app", "http://localhost:5173"]) {
+      vi.stubGlobal("window", { location: { origin, search: "" } });
+      try {
+        const html = renderSigns({ conferenceSlug: "uncommon-men-2026" });
+        expect(html).toContain(
+          'data-qr-url="https://uncommon-men.web.app/c/uncommon-men-2026/events/push-up"',
+        );
+        expect(html).not.toContain(origin);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+  });
+
   it("does not render the conference poster unless it is selected", () => {
     const html = renderSigns();
     expect(html).not.toContain("sign-poster");
