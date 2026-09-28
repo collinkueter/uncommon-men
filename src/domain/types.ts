@@ -47,3 +47,23 @@ export type Command =
  | { type: 'startGame'; eventId: string }
  | { type: 'gameWinner'; eventId: string; winnerId: string; revision: number; reason?: string };
 export interface ConferenceStore { getSnapshot(): AppSnapshot; subscribe(listener: () => void): () => void; execute(command: Command): Promise<void>; signInWithGoogle(preferredName?: string): Promise<void>; signInAdmin(): Promise<void>; signOutAdmin(): Promise<void>; clearError(): void; dispose(): void }
+/** An email role: platformRoles/{email} (organizer) or conferences/{cid}/admins/{email}. */
+export interface RoleGrant { email: string; auditId: string }
+/** The person signed in with Google, as far as platform administration is concerned. */
+export interface PlatformIdentity { uid: string; email?: string; name: string; organizer: boolean }
+/**
+ * Platform data outside any one conference. `conferences` holds every conference
+ * the viewer may list: all of them for organizers, live and archived ones otherwise.
+ * `organizers` and `audit` (platformAudit) are loaded for organizers only.
+ */
+export interface PlatformSnapshot {
+  mode: 'demo' | 'firebase';
+  identity: PlatformIdentity | null;
+  identityLoading: boolean;
+  conferences: Conference[];
+  conferencesLoading: boolean;
+  defaultConferenceId: string | null;
+  organizers: RoleGrant[];
+  audit: AuditEntry[];
+  error: string | null;
+}

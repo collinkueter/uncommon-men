@@ -44,6 +44,7 @@ import { log } from "@/lib/logging/logger";
 import { DEFAULT_CONFERENCE_ID } from "@/lib/conferencePaths";
 import { DEMO_RECORDED_AT } from "./demoClock";
 import { getFirebaseServices } from "./firebase";
+import { findDemoConference, subscribeDemoPlatform } from "./demoPlatform";
 
 // Browser-local keys are namespaced by conference id, because participants and
 // identities are separate per conference. The pre-multi-conference keys are
@@ -237,8 +238,16 @@ function rememberIdentity(conferenceId: string, identity: Identity | null) {
   }
 }
 
-/** The sample conference shown by ?demo=1 for any slug. */
+/**
+ * The conference shown by ?demo=1: one from the browser-local demo platform
+ * (seeded or created on /organizer), otherwise a sample conference for any slug.
+ */
 export function demoConference(conferenceId: string): Conference {
+  const known = findDemoConference(conferenceId);
+  if (known) {
+    const { created: _created, ...conference } = known;
+    return conference;
+  }
   return {
     id: conferenceId,
     slug: conferenceId,
@@ -250,7 +259,7 @@ export function demoConference(conferenceId: string): Conference {
   };
 }
 
-function toConference(id: string, value: Record<string, unknown>): Conference {
+export function toConference(id: string, value: Record<string, unknown>): Conference {
   return {
     id,
     slug: id,
@@ -340,12 +349,15 @@ class DemoStore extends BaseStore {
   private readonly stateKey: string;
   private readonly identityKey: string;
   constructor(conferenceId: string, createSeedState: () => ConferenceState) {
-    let data = createSeedState();
+    // A conference created on /organizer keeps the catalog it was created
+    // with; sample conferences refresh theirs from the built-in catalog.
+    const created = findDemoConference(conferenceId)?.created === true;
+    let data = created ? emptyState() : createSeedState();
     const stateKey = demoStateKey(conferenceId);
     try {
       const saved = readScoped(conferenceId, stateKey, LEGACY_DEMO_KEY);
       if (saved) {
-        data = migrateLegacyDemoDates(JSON.parse(saved));
+        data = created ? { ...emptyState(), ...JSON.parse(saved) } : migrateLegacyDemoDates(JSON.parse(saved));
         localStorage.setItem(stateKey, JSON.stringify(data));
       }
     } catch {
@@ -372,7 +384,13 @@ class DemoStore extends BaseStore {
     });
     this.stateKey = stateKey;
     this.identityKey = demoIdentityKey(conferenceId);
+    // Organizer and admin changes (status, details) apply to an open page.
+    this.unsubscribePlatform = subscribeDemoPlatform(() => {
+      this.snapshot = { ...this.snapshot, conference: demoConference(conferenceId) };
+      this.emit();
+    });
   }
+  private readonly unsubscribePlatform: () => void;
   private commit(data: ConferenceState) {
     this.snapshot = { ...this.snapshot, data };
     try {
@@ -810,6 +828,7 @@ class DemoStore extends BaseStore {
     this.emit();
   }
   dispose() {
+    this.unsubscribePlatform();
     this.listeners.clear();
   }
 }
