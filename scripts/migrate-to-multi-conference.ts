@@ -79,6 +79,7 @@ async function main() {
   const settingsExists = (await db.collection('settings').doc('platform').get()).exists;
   const plan: Record<string, { legacy: number; toCopy: number; alreadyIdentical: number; keptDifferent: number }> = {};
   const toCopy: { name: string; id: string; data: DocumentData }[] = [];
+  const differing: string[] = [];
   for (const name of CONFERENCE_COLLECTIONS) {
     const target = await conference.collection(name).get();
     const existing = new Map(target.docs.map((doc) => [doc.id, doc.data()]));
@@ -89,13 +90,19 @@ async function main() {
         row.toCopy += 1;
         toCopy.push({ name, id, data });
       } else if (sameValue(current, data)) row.alreadyIdentical += 1;
-      else row.keptDifferent += 1;
+      else {
+        row.keptDifferent += 1;
+        differing.push(`${name}/${id}`);
+      }
     }
     plan[name] = row;
   }
   process.stdout.write(`Conference document: ${conferenceExists ? 'exists (unchanged)' : `will be created ${JSON.stringify(fields)}`}\n`);
   process.stdout.write(`settings/platform: ${settingsExists ? 'exists (unchanged)' : `will be created with defaultConferenceId ${conferenceId}`}\n`);
   console.table(plan);
+  // A legacy document changed after an earlier run copied it (or the app has
+  // since changed the copy). It is never overwritten; review these by hand.
+  if (differing.length) process.stdout.write(`Kept (destination differs from legacy): ${differing.join(', ')}\n`);
   if (dryRun) {
     process.stdout.write('Dry run only. Nothing was written.\n');
     return;
