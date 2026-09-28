@@ -20,6 +20,7 @@ import {
   setDoc,
   writeBatch,
 } from "firebase/firestore";
+import { C, seedConference } from "./conference";
 
 let environment: RulesTestEnvironment;
 
@@ -36,10 +37,11 @@ beforeAll(async () => {
 afterEach(async () => environment.clearFirestore());
 afterAll(async () => environment.cleanup());
 beforeEach(async () => {
+  await seedConference(environment);
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await Promise.all([
-      setDoc(doc(db, "events", "pull-up"), {
+      setDoc(doc(db, C, "events", "pull-up"), {
         categoryId: "strength",
         name: "Pull Up",
         kind: "count",
@@ -51,7 +53,7 @@ beforeEach(async () => {
         active: true,
         auditId: "seed-event",
       }),
-      setDoc(doc(db, "events", "chess"), {
+      setDoc(doc(db, C, "events", "chess"), {
         categoryId: "strategy",
         name: "Chess",
         kind: "bracket",
@@ -63,18 +65,18 @@ beforeEach(async () => {
         active: true,
         auditId: "seed-chess-event",
       }),
-      setDoc(doc(db, "participants", "p1"), {
+      setDoc(doc(db, C, "participants", "p1"), {
         name: "Participant",
         normalizedName: "participant",
         auditId: "seed-person",
       }),
-      setDoc(doc(db, "identities", "recorder-1"), {
+      setDoc(doc(db, C, "identities", "recorder-1"), {
         uid: "recorder-1",
         name: "Recorder",
         participantId: null,
         auditId: "seed-identity",
       }),
-      setDoc(doc(db, "identities", "admin-1"), {
+      setDoc(doc(db, C, "identities", "admin-1"), {
         uid: "admin-1",
         name: "Admin",
         participantId: null,
@@ -86,8 +88,8 @@ beforeEach(async () => {
 
 function participantBatch(uid: string, actorUid = uid, auditId = "audit-1") {
   const db = environment.authenticatedContext(uid).firestore();
-  const target = doc(db, "participants", "name-marcus");
-  const audit = doc(db, "audit", auditId);
+  const target = doc(db, C, "participants", "name-marcus");
+  const audit = doc(db, C, "audit", auditId);
   const after = { name: "Marcus Reed", normalizedName: "marcus reed", auditId };
   const batch = writeBatch(db);
   batch.set(target, after);
@@ -144,13 +146,13 @@ describe("Firestore conference rules", () => {
   };
   async function seedBracket(value = bracket) {
     await environment.withSecurityRulesDisabled(async (context) =>
-      setDoc(doc(context.firestore(), "brackets", "chess-bracket"), value),
+      setDoc(doc(context.firestore(), C, "brackets", "chess-bracket"), value),
     );
   }
   function bracketUpdate(after: Record<string, unknown>, auditId: string) {
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const target = doc(db, "brackets", "chess-bracket");
-    const audit = doc(db, "audit", auditId);
+    const target = doc(db, C, "brackets", "chess-bracket");
+    const audit = doc(db, C, "audit", auditId);
     const withAudit = { ...after, auditId };
     return writeBatch(db).set(target, withAudit).set(audit, {
       action: "matchWinner",
@@ -176,13 +178,13 @@ describe("Firestore conference rules", () => {
     ["mismatched identity name", "p1", "p1", "Other Name", false],
   ])("checks self rename authorization: %s", async (_label, priorId, nextId, identityName, allowed) => {
     await environment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), "identities", "recorder-1"), {
+      await setDoc(doc(context.firestore(), C, "identities", "recorder-1"), {
         uid: "recorder-1", name: "Recorder", participantId: priorId, auditId: "seed-identity",
       });
     });
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const participantRef = doc(db, "participants", "p1");
-    const identityRef = doc(db, "identities", "recorder-1");
+    const participantRef = doc(db, C, "participants", "p1");
+    const identityRef = doc(db, C, "identities", "recorder-1");
     const participantBefore = (await getDoc(participantRef)).data()!;
     const identityBefore = (await getDoc(identityRef)).data()!;
     const participantAfter = { name: "New Name", normalizedName: "new name", auditId: "rename-person" };
@@ -190,12 +192,12 @@ describe("Firestore conference rules", () => {
     const batch = writeBatch(db);
     batch.set(participantRef, participantAfter);
     batch.set(identityRef, identityAfter);
-    batch.set(doc(db, "audit", "rename-person"), {
+    batch.set(doc(db, C, "audit", "rename-person"), {
       action: "renameParticipant", entityType: "participants", entityId: "p1",
       actorUid: "recorder-1", actorName: identityName, at: serverTimestamp(),
       before: participantBefore, after: participantAfter, reason: "Updated own name",
     });
-    batch.set(doc(db, "audit", "rename-identity"), {
+    batch.set(doc(db, C, "audit", "rename-identity"), {
       action: "identity", entityType: "identities", entityId: "recorder-1",
       actorUid: "recorder-1", actorName: identityName, at: serverTimestamp(),
       before: identityBefore, after: identityAfter, reason: "Updated own name",
@@ -208,7 +210,7 @@ describe("Firestore conference rules", () => {
     const publicDb = environment.unauthenticatedContext().firestore();
     await assertFails(
       writeBatch(publicDb)
-        .set(doc(publicDb, "participants", "p1"), {
+        .set(doc(publicDb, C, "participants", "p1"), {
           name: "A",
           normalizedName: "a",
           auditId: "x",
@@ -218,7 +220,7 @@ describe("Firestore conference rules", () => {
     const db = environment.authenticatedContext("recorder-1").firestore();
     await assertFails(
       writeBatch(db)
-        .set(doc(db, "participants", "p2"), {
+        .set(doc(db, C, "participants", "p2"), {
           name: "B",
           normalizedName: "b",
           auditId: "missing",
@@ -231,7 +233,7 @@ describe("Firestore conference rules", () => {
     await assertFails(participantBatch("recorder-1", "someone-else").commit());
     await assertSucceeds(participantBatch("recorder-1").commit());
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const target = doc(db, "participants", "name-second");
+    const target = doc(db, C, "participants", "name-second");
     const after = {
       name: "Second Person",
       normalizedName: "second person",
@@ -242,8 +244,8 @@ describe("Firestore conference rules", () => {
 
   it("allows a new result once and blocks an overwrite by its recorder", async () => {
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const target = doc(db, "attempts", "request-1");
-    const audit = doc(db, "audit", "attempt-audit");
+    const target = doc(db, C, "attempts", "request-1");
+    const audit = doc(db, C, "audit", "attempt-audit");
     const time = serverTimestamp();
     const after = {
       eventId: "pull-up",
@@ -278,8 +280,8 @@ describe("Firestore conference rules", () => {
   it("rejects unknown references, decimal counts, and forged recorder names", async () => {
     const db = environment.authenticatedContext("recorder-1").firestore();
     const make = (id: string, overrides: Record<string, unknown>) => {
-      const target = doc(db, "attempts", id);
-      const audit = doc(db, "audit", `audit-${id}`);
+      const target = doc(db, C, "attempts", id);
+      const audit = doc(db, C, "audit", `audit-${id}`);
       const time = serverTimestamp();
       const after = {
         eventId: "pull-up",
@@ -318,10 +320,10 @@ describe("Firestore conference rules", () => {
 
   it("lets a first-time visitor save a name and join the roster in one write", async () => {
     const db = environment.authenticatedContext("new-visitor").firestore();
-    const identityRef = doc(db, "identities", "new-visitor");
-    const participantRef = doc(db, "participants", "name-collin");
-    const participantAuditRef = doc(db, "audit", "join-participant-audit");
-    const identityAuditRef = doc(db, "audit", "join-identity-audit");
+    const identityRef = doc(db, C, "identities", "new-visitor");
+    const participantRef = doc(db, C, "participants", "name-collin");
+    const participantAuditRef = doc(db, C, "audit", "join-participant-audit");
+    const identityAuditRef = doc(db, C, "audit", "join-identity-audit");
     const at = serverTimestamp();
     const participantAfter = { name: "Collin", normalizedName: "collin", auditId: participantAuditRef.id };
     const identityAfter = { uid: "new-visitor", name: "Collin", participantId: participantRef.id, auditId: identityAuditRef.id };
@@ -343,13 +345,13 @@ describe("Firestore conference rules", () => {
 
   it("allows first result to create participant and link the recorder identity atomically", async () => {
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const identityRef = doc(db, "identities", "recorder-1");
+    const identityRef = doc(db, C, "identities", "recorder-1");
     const identityBefore = (await getDoc(identityRef)).data()!;
-    const participantRef = doc(db, "participants", "name-new-recorder");
-    const attemptRef = doc(db, "attempts", "first-result-request");
-    const participantAuditRef = doc(db, "audit", "first-participant-audit");
-    const attemptAuditRef = doc(db, "audit", "first-attempt-audit");
-    const identityAuditRef = doc(db, "audit", "first-identity-audit");
+    const participantRef = doc(db, C, "participants", "name-new-recorder");
+    const attemptRef = doc(db, C, "attempts", "first-result-request");
+    const participantAuditRef = doc(db, C, "audit", "first-participant-audit");
+    const attemptAuditRef = doc(db, C, "audit", "first-attempt-audit");
+    const identityAuditRef = doc(db, C, "audit", "first-identity-audit");
     const at = serverTimestamp();
     const participantAfter = {
       name: "Recorder",
@@ -419,8 +421,8 @@ describe("Firestore conference rules", () => {
     const recorderDb = environment
       .authenticatedContext("recorder-1")
       .firestore();
-    const target = doc(recorderDb, "attempts", "request-1");
-    const createAudit = doc(recorderDb, "audit", "attempt-create");
+    const target = doc(recorderDb, C, "attempts", "request-1");
+    const createAudit = doc(recorderDb, C, "audit", "attempt-create");
     const createTime = serverTimestamp();
     const initial = {
       eventId: "pull-up",
@@ -449,7 +451,7 @@ describe("Firestore conference rules", () => {
     });
     await assertSucceeds(create.commit());
     const before = (await getDoc(target)).data()!;
-    const nonAdminAudit = doc(recorderDb, "audit", "bad-correction");
+    const nonAdminAudit = doc(recorderDb, C, "audit", "bad-correction");
     const updateTime = serverTimestamp();
     const nonAdminAfter = {
       ...before,
@@ -476,8 +478,8 @@ describe("Firestore conference rules", () => {
     const adminDb = environment
       .authenticatedContext("admin-1", { admin: true })
       .firestore();
-    const adminTarget = doc(adminDb, "attempts", target.id);
-    const adminAudit = doc(adminDb, "audit", "good-correction");
+    const adminTarget = doc(adminDb, C, "attempts", target.id);
+    const adminAudit = doc(adminDb, C, "audit", "good-correction");
     const adminTime = serverTimestamp();
     const after = {
       ...before,
@@ -507,10 +509,10 @@ describe("Firestore conference rules", () => {
     await environment.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
       await Promise.all([
-        setDoc(doc(db, "events", "cornhole"), { team: true, teamSize: 2 }),
-        setDoc(doc(db, "participants", "p2"), { name: "Second" }),
-        setDoc(doc(db, "participants", "p3"), { name: "Third" }),
-        setDoc(doc(db, "teams", "team-one"), before),
+        setDoc(doc(db, C, "events", "cornhole"), { team: true, teamSize: 2 }),
+        setDoc(doc(db, C, "participants", "p2"), { name: "Second" }),
+        setDoc(doc(db, C, "participants", "p3"), { name: "Third" }),
+        setDoc(doc(db, C, "teams", "team-one"), before),
       ]);
     });
     for (const isAdmin of [false, true]) {
@@ -519,8 +521,8 @@ describe("Firestore conference rules", () => {
       const auditId = `team-edit-${uid}`;
       const after = { ...before, name: "Renamed Team", memberIds: ["p1", "p3"], auditId };
       const update = writeBatch(db)
-        .set(doc(db, "teams", "team-one"), after)
-        .set(doc(db, "audit", auditId), {
+        .set(doc(db, C, "teams", "team-one"), after)
+        .set(doc(db, C, "audit", auditId), {
           action: "saveTeam", entityType: "teams", entityId: "team-one",
           actorUid: uid, actorName: isAdmin ? "Admin" : "Recorder",
           at: serverTimestamp(), before, after, reason: "Roster correction",
@@ -532,7 +534,7 @@ describe("Firestore conference rules", () => {
 
   it("allows audit reads only for admins", async () => {
     await environment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), "audit", "seed-read-audit"), {
+      await setDoc(doc(context.firestore(), C, "audit", "seed-read-audit"), {
         action: "attempt",
         entityType: "attempts",
         entityId: "request-1",
@@ -547,17 +549,17 @@ describe("Firestore conference rules", () => {
     const publicDb = environment.unauthenticatedContext().firestore();
     const recorderDb = environment.authenticatedContext("recorder-1").firestore();
     const adminDb = environment.authenticatedContext("admin-1", { admin: true }).firestore();
-    const auditRef = doc(adminDb, "audit", "seed-read-audit");
+    const auditRef = doc(adminDb, C, "audit", "seed-read-audit");
 
-    await assertFails(getDoc(doc(publicDb, "audit", auditRef.id)));
-    await assertFails(getDoc(doc(recorderDb, "audit", auditRef.id)));
+    await assertFails(getDoc(doc(publicDb, C, "audit", auditRef.id)));
+    await assertFails(getDoc(doc(recorderDb, C, "audit", auditRef.id)));
     await assertSucceeds(getDoc(auditRef));
   });
 
   it("rejects an attempted self-grant of the admin field", async () => {
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const identityRef = doc(db, "identities", "recorder-1");
-    const auditRef = doc(db, "audit", "self-grant-audit");
+    const identityRef = doc(db, C, "identities", "recorder-1");
+    const auditRef = doc(db, C, "audit", "self-grant-audit");
     const before = (await getDoc(identityRef)).data()!;
     const after = {
       ...before,
@@ -589,8 +591,8 @@ describe("Firestore conference rules", () => {
       order: 10,
     };
     const recorderDb = environment.authenticatedContext("recorder-1").firestore();
-    const deniedCategory = doc(recorderDb, "categories", "strength");
-    const deniedCategoryAudit = doc(recorderDb, "audit", "denied-category-create");
+    const deniedCategory = doc(recorderDb, C, "categories", "strength");
+    const deniedCategoryAudit = doc(recorderDb, C, "audit", "denied-category-create");
     await assertFails(
       writeBatch(recorderDb)
         .set(deniedCategory, { ...categoryAfter, auditId: deniedCategoryAudit.id })
@@ -619,8 +621,8 @@ describe("Firestore conference rules", () => {
       instructions: "Complete as many repetitions as possible.",
       active: true,
     };
-    const deniedEvent = doc(recorderDb, "events", "burpees");
-    const deniedEventAudit = doc(recorderDb, "audit", "denied-event-create");
+    const deniedEvent = doc(recorderDb, C, "events", "burpees");
+    const deniedEventAudit = doc(recorderDb, C, "audit", "denied-event-create");
     await assertFails(
       writeBatch(recorderDb)
         .set(deniedEvent, { ...eventAfter, auditId: deniedEventAudit.id })
@@ -639,8 +641,8 @@ describe("Firestore conference rules", () => {
     );
 
     const adminDb = environment.authenticatedContext("admin-1", { admin: true }).firestore();
-    const categoryRef = doc(adminDb, "categories", "admin-strength");
-    const categoryAuditRef = doc(adminDb, "audit", "admin-category-create");
+    const categoryRef = doc(adminDb, C, "categories", "admin-strength");
+    const categoryAuditRef = doc(adminDb, C, "audit", "admin-category-create");
     const validCategory = { ...categoryAfter, auditId: categoryAuditRef.id };
     await assertSucceeds(
       writeBatch(adminDb)
@@ -659,8 +661,8 @@ describe("Firestore conference rules", () => {
         .commit(),
     );
 
-    const eventRef = doc(adminDb, "events", "admin-burpees");
-    const eventAuditRef = doc(adminDb, "audit", "admin-event-create");
+    const eventRef = doc(adminDb, C, "events", "admin-burpees");
+    const eventAuditRef = doc(adminDb, C, "audit", "admin-event-create");
     const validEvent = { ...eventAfter, categoryId: categoryRef.id, auditId: eventAuditRef.id };
     await assertSucceeds(
       writeBatch(adminDb)
@@ -682,8 +684,8 @@ describe("Firestore conference rules", () => {
 
   it("protects event configuration with the admin custom claim", async () => {
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const target = doc(db, "events", "pull-up");
-    const audit = doc(db, "audit", "event-audit");
+    const target = doc(db, C, "events", "pull-up");
+    const audit = doc(db, C, "audit", "event-audit");
     const after = {
       categoryId: "strength",
       name: "Pull Up",
@@ -791,8 +793,8 @@ describe("Firestore conference rules", () => {
       index === 0 ? { ...match, winnerId: "p2" } : { ...match },
     );
     const db = environment.authenticatedContext("recorder-1").firestore();
-    const target = doc(db, "brackets", "chess-bracket");
-    const audit = doc(db, "audit", "bracket-overwrite");
+    const target = doc(db, C, "brackets", "chess-bracket");
+    const audit = doc(db, C, "audit", "bracket-overwrite");
     const after = {
       ...completed,
       matches: changed,

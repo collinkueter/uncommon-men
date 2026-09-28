@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { advanceBracket, createBracket } from "../src/domain/ranking";
+import { C, seedConference } from "./conference";
 
 let environment: RulesTestEnvironment;
 const eventId = "lightning-knockout";
@@ -14,14 +15,14 @@ beforeAll(async () => {
 });
 afterAll(async () => environment.cleanup());
 beforeEach(async () => {
-  await environment.clearFirestore();
+  await environment.clearFirestore(); await seedConference(environment);
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await Promise.all([
-      setDoc(doc(db, `events/${eventId}`), { kind: "knockout", team: false, active: true }),
-      setDoc(doc(db, "identities/player"), { name: "Player" }),
-      setDoc(doc(db, "identities/admin"), { name: "Admin" }),
-      ...["a", "b", "c"].map((id) => setDoc(doc(db, `participants/${id}`), { name: id })),
+      setDoc(doc(db, C, `events/${eventId}`), { kind: "knockout", team: false, active: true }),
+      setDoc(doc(db, C, "identities/player"), { name: "Player" }),
+      setDoc(doc(db, C, "identities/admin"), { name: "Admin" }),
+      ...["a", "b", "c"].map((id) => setDoc(doc(db, C, `participants/${id}`), { name: id })),
     ]);
   });
 });
@@ -30,7 +31,7 @@ function draft(entrants = ["a"], revision = 1) {
 }
 async function seed(data: Record<string, unknown>) {
   const value = { ...data, auditId: "seed" };
-  await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), `games/${gameId}`), value));
+  await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), C, `games/${gameId}`), value));
   return value;
 }
 async function write(data: Record<string, unknown>, options: {
@@ -44,14 +45,14 @@ async function write(data: Record<string, unknown>, options: {
   const collection = options.collection ?? "games";
   const auditId = `audit-${crypto.randomUUID()}`;
   const after = { ...data, auditId };
-  const batch = writeBatch(db).set(doc(db, `${collection}/${id}`), after);
-  if (options.audited !== false) batch.set(doc(db, `audit/${auditId}`), {
+  const batch = writeBatch(db).set(doc(db, C, `${collection}/${id}`), after);
+  if (options.audited !== false) batch.set(doc(db, C, `audit/${auditId}`), {
     action: options.action ?? "joinGame", entityType: collection, entityId: id,
     actorUid: uid, actorName: options.admin ? "Admin" : "Player", at: serverTimestamp(),
     before: options.before ?? null, after, reason: options.reason ?? "Game updated",
   });
   await batch.commit();
-  return (await getDoc(doc(db, `${collection}/${id}`))).data()!;
+  return (await getDoc(doc(db, C, `${collection}/${id}`))).data()!;
 }
 
 describe("knockout game rules", () => {
@@ -83,7 +84,7 @@ describe("knockout game rules", () => {
 
   it("requires an active individual knockout event", async () => {
     for (const override of [{ active: false }, { kind: "bracket" }, { team: true }]) {
-      await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), `events/${eventId}`), { kind: "knockout", team: false, active: true, ...override }));
+      await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), C, `events/${eventId}`), { kind: "knockout", team: false, active: true, ...override }));
       await assertFails(write(draft()));
     }
   });
@@ -127,7 +128,7 @@ describe("knockout game rules", () => {
     const bracket = createBracket(eventId, ["a", "b"]);
     const { id, ...data } = bracket;
     const before = { ...data, auditId: "seed" };
-    await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), `brackets/${id}`), before));
+    await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), C, `brackets/${id}`), before));
     const { id: _, ...completed } = advanceBracket(bracket, bracket.matches[0].id, "a");
     await assertFails(write({ ...completed, lastMatchIndex: 0, lastParentIndex: -1 }, {
       before, collection: "brackets", id, action: "matchWinner",

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -32,5 +32,6 @@ export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: { host: '0.0.0.0', port: 5173 },
   build: { rollupOptions: { output: { manualChunks: vendorChunk } } },
-  test: { environment: 'node' },
+  // Agent worktrees under .claude/ hold other checkouts of this repository.
+  test: { environment: 'node', exclude: [...configDefaults.exclude, '.claude/**'] },
 });

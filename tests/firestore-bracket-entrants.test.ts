@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { doc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { addBracketEntrant, advanceBracket, createBracket } from "../src/domain/ranking";
+import { C, seedConference } from "./conference";
 
 let environment: RulesTestEnvironment;
 beforeAll(async () => {
@@ -12,15 +13,15 @@ beforeAll(async () => {
 });
 afterAll(async () => environment.cleanup());
 beforeEach(async () => {
-  await environment.clearFirestore();
+  await environment.clearFirestore(); await seedConference(environment);
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await Promise.all([
-      setDoc(doc(db, "events/cornhole"), { team: true, kind: "bracket" }),
-      setDoc(doc(db, "identities/admin"), { name: "Admin" }),
-      setDoc(doc(db, "identities/recorder"), { name: "Recorder" }),
-      ...["a", "b", "c", "d"].map((id) => setDoc(doc(db, `teams/${id}`), { eventId: "cornhole" })),
-      setDoc(doc(db, "teams/other"), { eventId: "foosball" }),
+      setDoc(doc(db, C, "events/cornhole"), { team: true, kind: "bracket" }),
+      setDoc(doc(db, C, "identities/admin"), { name: "Admin" }),
+      setDoc(doc(db, C, "identities/recorder"), { name: "Recorder" }),
+      ...["a", "b", "c", "d"].map((id) => setDoc(doc(db, C, `teams/${id}`), { eventId: "cornhole" })),
+      setDoc(doc(db, C, "teams/other"), { eventId: "foosball" }),
     ]);
   });
 });
@@ -29,13 +30,13 @@ function stored(bracket: ReturnType<typeof createBracket>, auditId = "seed") {
   return { ...data, auditId };
 }
 async function seed(data: Record<string, unknown>) {
-  await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), "brackets/cornhole-bracket"), data));
+  await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), C, "brackets/cornhole-bracket"), data));
 }
 function update(before: Record<string, unknown>, data: Record<string, unknown>, admin = true, action = "addBracketTeam") {
   const uid = admin ? "admin" : "recorder";
   const db = environment.authenticatedContext(uid, { admin }).firestore();
   const after = { ...data, auditId: "change" };
-  return writeBatch(db).set(doc(db, "brackets/cornhole-bracket"), after).set(doc(db, "audit/change"), {
+  return writeBatch(db).set(doc(db, C, "brackets/cornhole-bracket"), after).set(doc(db, C, "audit/change"), {
     action, entityType: "brackets", entityId: "cornhole-bracket", actorUid: uid,
     actorName: admin ? "Admin" : "Recorder", at: serverTimestamp(), before, after, reason: "Entrant test",
   }).commit();

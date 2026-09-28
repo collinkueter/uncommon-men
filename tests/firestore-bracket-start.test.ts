@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { doc, getDoc, runTransaction, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { advanceBracket, createBracket } from "../src/domain/ranking";
+import { C, seedConference } from "./conference";
 
 let environment: RulesTestEnvironment;
 const eventId = "carpet-ball";
@@ -13,14 +14,14 @@ beforeAll(async () => {
 });
 afterAll(async () => environment.cleanup());
 beforeEach(async () => {
-  await environment.clearFirestore();
+  await environment.clearFirestore(); await seedConference(environment);
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await Promise.all([
-      setDoc(doc(db, `events/${eventId}`), { categoryId: "cat", name: "Carpet Ball", kind: "bracket", direction: "higher", unit: "wins", team: false, teamSize: 0, instructions: "", active: true }),
-      setDoc(doc(db, "identities/player"), { name: "Player" }),
-      setDoc(doc(db, "identities/admin"), { name: "Admin" }),
-      ...Array.from({ length: 130 }, (_, i) => setDoc(doc(db, `participants/p${i + 1}`), { name: `P${i + 1}` })),
+      setDoc(doc(db, C, `events/${eventId}`), { categoryId: "cat", name: "Carpet Ball", kind: "bracket", direction: "higher", unit: "wins", team: false, teamSize: 0, instructions: "", active: true }),
+      setDoc(doc(db, C, "identities/player"), { name: "Player" }),
+      setDoc(doc(db, C, "identities/admin"), { name: "Admin" }),
+      ...Array.from({ length: 130 }, (_, i) => setDoc(doc(db, C, `participants/p${i + 1}`), { name: `P${i + 1}` })),
     ]);
   });
 });
@@ -29,16 +30,16 @@ function registration(entrants: string[] = [], revision = 1) { return { eventId,
 function bracketWrite(data: Record<string, unknown>, o: { uid?: string; signedIn?: boolean; admin?: boolean; action?: string; id?: string; auditId?: string; before?: Record<string, unknown> | null } = {}) {
   const uid = o.uid ?? "player"; const id = o.id ?? bracketId; const auditId = o.auditId ?? `audit-${Math.random().toString(36).slice(2)}`; const after = { ...data, auditId };
   const actorDb = o.signedIn === false ? environment.unauthenticatedContext().firestore() : db(uid, o.admin ?? false);
-  const batch = writeBatch(actorDb).set(doc(actorDb, `brackets/${id}`), after);
-  if (auditId) batch.set(doc(actorDb, `audit/${auditId}`), { action: o.action ?? "joinBracket", entityType: "brackets", entityId: id, actorUid: uid, actorName: uid === "admin" ? "Admin" : "Player", at: serverTimestamp(), before: o.before ?? null, after, reason: o.action === "startBracket" ? "Bracket started" : "Joined bracket" });
+  const batch = writeBatch(actorDb).set(doc(actorDb, C, `brackets/${id}`), after);
+  if (auditId) batch.set(doc(actorDb, C, `audit/${auditId}`), { action: o.action ?? "joinBracket", entityType: "brackets", entityId: id, actorUid: uid, actorName: uid === "admin" ? "Admin" : "Player", at: serverTimestamp(), before: o.before ?? null, after, reason: o.action === "startBracket" ? "Bracket started" : "Joined bracket" });
   return batch.commit();
 }
-async function seed(data: Record<string, unknown>) { await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), `brackets/${bracketId}`), data)); }
-async function setTeamEvent() { await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), `events/${eventId}`), { categoryId: "cat", name: "Teams", kind: "bracket", direction: "higher", unit: "wins", team: true, teamSize: 2, instructions: "", active: true })); }
+async function seed(data: Record<string, unknown>) { await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), C, `brackets/${bracketId}`), data)); }
+async function setTeamEvent() { await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), C, `events/${eventId}`), { categoryId: "cat", name: "Teams", kind: "bracket", direction: "higher", unit: "wins", team: true, teamSize: 2, instructions: "", active: true })); }
 function teamJoin(includeRegistration = true, admin = false, teamId = "team-1") {
   const actorUid = admin ? "admin" : "player"; const actorName = admin ? "Admin" : "Player"; const actorDb = db(actorUid, admin); const team = { eventId, name: "The Pair", memberIds: ["p1", "p2"], auditId: `team-audit-${teamId}` }; const bracket = { ...registration([teamId]), auditId: `join-audit-${teamId}` };
-  const batch = writeBatch(actorDb).set(doc(actorDb, `teams/${teamId}`), team).set(doc(actorDb, `audit/team-audit-${teamId}`), { action: "saveTeam", entityType: "teams", entityId: teamId, actorUid, actorName, at: serverTimestamp(), before: null, after: team, reason: "Team saved" });
-  if (includeRegistration) batch.set(doc(actorDb, `brackets/${bracketId}`), bracket).set(doc(actorDb, `audit/join-audit-${teamId}`), { action: "joinBracket", entityType: "brackets", entityId: bracketId, actorUid, actorName, at: serverTimestamp(), before: null, after: bracket, reason: "Joined bracket" });
+  const batch = writeBatch(actorDb).set(doc(actorDb, C, `teams/${teamId}`), team).set(doc(actorDb, C, `audit/team-audit-${teamId}`), { action: "saveTeam", entityType: "teams", entityId: teamId, actorUid, actorName, at: serverTimestamp(), before: null, after: team, reason: "Team saved" });
+  if (includeRegistration) batch.set(doc(actorDb, C, `brackets/${bracketId}`), bracket).set(doc(actorDb, C, `audit/join-audit-${teamId}`), { action: "joinBracket", entityType: "brackets", entityId: bracketId, actorUid, actorName, at: serverTimestamp(), before: null, after: bracket, reason: "Joined bracket" });
   return batch.commit();
 }
 
@@ -54,7 +55,7 @@ describe("bracket registration rules", () => {
     await assertFails(bracketWrite(registration(["p1"]), { signedIn: false }));
     await assertFails(bracketWrite(registration(["p1"]), { auditId: "" }));
     await assertFails(bracketWrite(registration(["missing"])));
-    await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), `events/${eventId}`), { active: false, kind: "bracket", team: false }));
+    await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), C, `events/${eventId}`), { active: false, kind: "bracket", team: false }));
     await assertFails(bracketWrite(registration(["p1"])));
   });
   it("enforces canonical id, exact append, duplicate rejection, and max 128", async () => {
@@ -96,22 +97,22 @@ describe("bracket registration rules", () => {
     await assertFails(bracketWrite({ ...before, matches: [{ id: "fake" }], revision: 3 }, { action: "matchWinner", before }));
   });
   it("atomically creates a team and joins it, while requiring registration draft", async () => {
-    await setTeamEvent(); await assertSucceeds(teamJoin()); await environment.clearFirestore(); await setTeamEvent();
-    await environment.withSecurityRulesDisabled(async (context) => { const x = context.firestore(); await setDoc(doc(x, "identities/player"), { name: "Player" }); await setDoc(doc(x, "participants/p1"), { name: "P1" }); await setDoc(doc(x, "participants/p2"), { name: "P2" }); });
+    await setTeamEvent(); await assertSucceeds(teamJoin()); await environment.clearFirestore(); await seedConference(environment); await setTeamEvent();
+    await environment.withSecurityRulesDisabled(async (context) => { const x = context.firestore(); await setDoc(doc(x, C, "identities/player"), { name: "Player" }); await setDoc(doc(x, C, "participants/p1"), { name: "P1" }); await setDoc(doc(x, C, "participants/p2"), { name: "P2" }); });
     await assertFails(teamJoin(false, false, "team-2"));
   });
   it("rejects a team belonging to another event", async () => {
     await setTeamEvent();
     await environment.withSecurityRulesDisabled(async (context) => {
-      const x = context.firestore(); await setDoc(doc(x, "events/other-event"), { ...{ categoryId: "cat", name: "Other", kind: "bracket", direction: "higher", unit: "wins", team: true, teamSize: 2, instructions: "", active: true } });
-      await setDoc(doc(x, "teams/foreign"), { eventId: "other-event", name: "Foreign", memberIds: ["p1", "p2"] });
+      const x = context.firestore(); await setDoc(doc(x, C, "events/other-event"), { ...{ categoryId: "cat", name: "Other", kind: "bracket", direction: "higher", unit: "wins", team: true, teamSize: 2, instructions: "", active: true } });
+      await setDoc(doc(x, C, "teams/foreign"), { eventId: "other-event", name: "Foreign", memberIds: ["p1", "p2"] });
     });
     await assertFails(bracketWrite(registration(["foreign"]), { auditId: "wrong-team" }));
   });
   it("keeps both entrants when two users join concurrently", async () => {
     await seed({ ...registration(["p1"], 1), auditId: "seed" });
     const join = async (uid: string, entrant: string, auditId: string) => {
-      const actorDb = db(uid); const target = doc(actorDb, `brackets/${bracketId}`); const audit = doc(actorDb, `audit/${auditId}`);
+      const actorDb = db(uid); const target = doc(actorDb, C, `brackets/${bracketId}`); const audit = doc(actorDb, C, `audit/${auditId}`);
       await runTransaction(actorDb, async (tx) => {
         const snapshot = await tx.get(target); const before = snapshot.data()!; const after = { ...before, entrants: [...before.entrants, entrant], revision: before.revision + 1, auditId };
         tx.set(target, after); tx.set(audit, { action: "joinBracket", entityType: "brackets", entityId: bracketId, actorUid: uid, actorName: uid === "admin" ? "Admin" : "Player", at: serverTimestamp(), before, after, reason: "Joined bracket" });
@@ -119,14 +120,14 @@ describe("bracket registration rules", () => {
     };
     const results = await Promise.allSettled([join("player", "p2", "concurrent-2"), join("player", "p3", "concurrent-3")]);
     for (const [index, result] of results.entries()) if (result.status === "rejected") await join("player", index === 0 ? "p2" : "p3", index === 0 ? "concurrent-2-retry" : "concurrent-3-retry");
-    const snapshot = await getDoc(doc(db("player"), `brackets/${bracketId}`));
+    const snapshot = await getDoc(doc(db("player"), C, `brackets/${bracketId}`));
     expect(snapshot.data()?.entrants).toHaveLength(3);
     expect(snapshot.data()?.entrants[0]).toBe("p1");
     expect(new Set(snapshot.data()?.entrants.slice(1))).toEqual(new Set(["p2", "p3"]));
   });
   it("denies public team signup after start and permits admin team creation outside it", async () => {
     await setTeamEvent(); const { id: _id, ...started } = createBracket(eventId, ["team-0", "team-1"]);
-    await environment.withSecurityRulesDisabled(async (context) => { const x = context.firestore(); await setDoc(doc(x, "teams/team-0"), { eventId, name: "Existing", memberIds: ["p1", "p2"] }); await setDoc(doc(x, `brackets/${bracketId}`), { ...started, auditId: "active" }); });
+    await environment.withSecurityRulesDisabled(async (context) => { const x = context.firestore(); await setDoc(doc(x, C, "teams/team-0"), { eventId, name: "Existing", memberIds: ["p1", "p2"] }); await setDoc(doc(x, C, `brackets/${bracketId}`), { ...started, auditId: "active" }); });
     await assertFails(teamJoin()); await assertSucceeds(teamJoin(false, true));
   });
 });
