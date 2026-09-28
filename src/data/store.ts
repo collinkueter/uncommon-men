@@ -950,6 +950,13 @@ class FirebaseStore extends BaseStore {
   ) {
     this.snapshot = { ...this.snapshot, conferenceState, conference };
     this.emit();
+    // Collections refused while the conference did not exist yet (for example
+    // before it was created or migrated) become readable once it does.
+    if (conferenceState === "ready" && this.deniedCollections.size) {
+      const denied = [...this.deniedCollections];
+      this.deniedCollections.clear();
+      denied.forEach((name) => this.listenCollection(name));
+    }
     if (conferenceState === "ready" && this.identitySkipped) {
       this.identitySkipped = false;
       void this.handleUser(this.auth?.currentUser ?? null);
