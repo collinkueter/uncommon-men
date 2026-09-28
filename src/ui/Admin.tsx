@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Clock3,
   FileText,
+  QrCode,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -400,6 +401,9 @@ export function Admin() {
               {t}
             </button>
           ))}
+          <Link className="button" to={withDemo("/admin/signs")}>
+            <QrCode /> Event signs
+          </Link>
           <Button type="button" onClick={signOutAdmin}>Sign out</Button>
         </aside>
         <div className="admin-main">

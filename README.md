@@ -85,6 +85,10 @@ FIREBASE_PROJECT_ID=your-project-id npx tsx scripts/admin-access.ts grant your-e
 
 After granting or revoking access, the user must sign out and sign in again. Firebase ID tokens are cached for about one hour, so a revoked role can continue to work until the cached token expires or the user signs in again; do not treat revocation as an instant session shutdown. The `?demo=1` administrator shown in the local sample is intentionally local sample data and never grants a Firebase administrator role.
 
+## Event signs
+
+Printed event signs are generated in the app, not maintained offline. An administrator opens `/admin/signs`, picks the active events to print (or "Print all"), optionally adds the conference poster, and prints with the browser's print dialog (Save as PDF works well) — one letter-size sign per page, each with a QR code generated in the browser that opens straight into that event. The sign content (name, category, how-to-play instructions, scoring summary, and the QR target) is derived live from the event catalog, so it always matches what administrators have configured.
+
 ## Design references
 
 The six approved mockups are in `docs/mockups/`. Implementation decisions and verification gates are documented in `docs/IMPLEMENTATION_PLAN.md`. Visual comparison evidence is recorded in `docs/VERIFICATION.md` after review.

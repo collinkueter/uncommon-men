@@ -20,6 +20,9 @@ const Results = lazy(() =>
 const Admin = lazy(() =>
   import("./Admin").then(({ Admin }) => ({ default: Admin })),
 );
+const Signs = lazy(() =>
+  import("./Signs").then(({ Signs }) => ({ default: Signs })),
+);
 
 function Deferred({ children }: { children: ReactNode }) {
   return (
@@ -51,6 +54,7 @@ function Router() {
       <Route path="/standings" element={<Deferred><Standings /></Deferred>} />
       <Route path="/results" element={<Deferred><Results /></Deferred>} />
       <Route path="/admin" element={<Deferred><Admin /></Deferred>} />
+      <Route path="/admin/signs" element={<Deferred><Signs /></Deferred>} />
       <Route path="*" element={<Navigate to={withDemo("/events")} replace />} />
     </Routes>
   );
