@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Clock3,
   FileText,
+  QrCode,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -292,6 +293,7 @@ function AdminEvents({
   );
 }
 export function Admin() {
+  const link = useConferenceLink();
   const { snapshot, execute, signInAdmin, signOutAdmin } = useConference();
   const [tab, setTab] = useState<
     "results" | "participants" | "events" | "audit"
@@ -401,6 +403,9 @@ export function Admin() {
               {t}
             </button>
           ))}
+          <Link className="button" to={link("/admin/signs")}>
+            <QrCode /> Event signs
+          </Link>
           <Button type="button" onClick={signOutAdmin}>Sign out</Button>
         </aside>
         <div className="admin-main">

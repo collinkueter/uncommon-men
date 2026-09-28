@@ -762,6 +762,19 @@ a:focus-visible {
   margin-top: 2rem;
   color: var(--color-text);
 }
+.admin > aside a.button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem 1.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: 500 1.1rem var(--font-body);
+  text-decoration: none;
+}
 .admin-main {
   padding: 3rem;
   max-width: 1000px;
@@ -938,7 +951,8 @@ a:focus-visible {
     display: none;
   }
   .admin > aside > button:last-child { margin-top: 0; }
-  .admin > aside button {
+  .admin > aside button,
+  .admin > aside a.button {
     width: 100%;
     min-height: 44px;
     justify-content: center;
@@ -946,8 +960,10 @@ a:focus-visible {
     white-space: nowrap;
     padding: 0.65rem 0.3rem;
     font-size: 0.9rem;
+    margin-top: 0;
   }
-  .admin > aside button svg {
+  .admin > aside button svg,
+  .admin > aside a.button svg {
     display: none;
   }
   .admin-main {

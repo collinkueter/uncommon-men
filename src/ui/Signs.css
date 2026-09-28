@@ -1,0 +1,299 @@
+/* Screen controls */
+.signs-page {
+  padding: 1.5rem 1.25rem 3rem;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.signs-controls h1 {
+  margin: 0 0 0.5rem;
+}
+.signs-controls > p {
+  color: var(--color-muted);
+  margin: 0 0 1rem;
+}
+.signs-select-all {
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.25rem !important;
+  font-weight: 700 !important;
+}
+.signs-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-height: 45vh;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.signs-list li {
+  padding: 0 0.85rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.signs-list li:last-child {
+  border-bottom: none;
+}
+.signs-poster-toggle {
+  font-weight: 700 !important;
+}
+.signs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.signs-actions .button svg {
+  width: 18px;
+  height: 18px;
+  margin-right: 0.4rem;
+  vertical-align: -3px;
+}
+.signs-print-area {
+  display: none;
+}
+
+/* Print sign design. This reproduces the approved layout that used to live in
+   artifacts/activity-signs/activity-signs.html, now driven by live event data. */
+@media print {
+  @page {
+    size: letter;
+    margin: 0;
+  }
+  html,
+  body {
+    background: #fff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .app-shell > .topbar,
+  .app-shell > .notice,
+  .app-shell > footer.build-version,
+  .signs-controls {
+    display: none !important;
+  }
+  .signs-page {
+    padding: 0;
+    max-width: none;
+    margin: 0;
+  }
+  .signs-print-area {
+    display: block;
+  }
+}
+
+.sign-sheet {
+  width: 8.5in;
+  height: 11in;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fbfbf6;
+  color: #172019;
+  font-family: "Barlow", Arial, sans-serif;
+}
+@media screen {
+  .sign-sheet {
+    margin: 0 auto 1.5rem;
+    box-shadow: 0 8px 30px #0006;
+  }
+}
+@media print {
+  .sign-sheet {
+    margin: 0;
+    box-shadow: none;
+    break-after: page;
+    page-break-after: always;
+  }
+  .sign-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}
+.sign-top {
+  min-height: 1.2in;
+  padding: 0.37in 0.55in 0.28in;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.3in;
+  background: linear-gradient(90deg, #172019 51%, #172019d9), url("/brand/camo.svg") right center / 3.2in auto;
+  color: #f7f8f0;
+}
+.sign-brand {
+  font: 900 31pt/0.86 "Barlow Condensed", Impact, sans-serif;
+  letter-spacing: -0.02em;
+  transform: skew(-4deg);
+}
+.sign-brand em {
+  color: #cce84e;
+  font-style: normal;
+}
+.sign-brand-rule {
+  width: 2.1in;
+  height: 5px;
+  margin-top: 0.15in;
+  background: #cce84e;
+  transform: skew(-18deg);
+}
+.sign-top-label {
+  padding-top: 0.03in;
+  text-align: right;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: #e7ecd9;
+  font-size: 9.5pt;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  white-space: pre-line;
+}
+.sign-content {
+  flex: 1;
+  padding: 0.5in 0.58in 0.3in;
+  display: flex;
+  flex-direction: column;
+}
+.sign-content h1 {
+  max-width: 7.2in;
+  margin: 0 0 0.29in;
+  padding-bottom: 0.25in;
+  border-bottom: 2px solid #ccd5bd;
+  font: 900 42pt/0.94 "Barlow Condensed", Impact, sans-serif;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.sign-how-label {
+  margin: 0 0 0.1in;
+  color: #476026;
+  font-size: 12pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.sign-lead {
+  margin: 0 0 0.34in;
+  font-size: 17pt;
+  line-height: 1.24;
+  font-weight: 600;
+}
+.sign-result-box {
+  padding: 0.24in 0.28in 0.27in;
+  border: 1px solid #aebba0;
+  border-top: 4px solid #b9d734;
+  background: #f0f3e5;
+}
+.sign-result-box h2 {
+  margin: 0 0 0.12in;
+  font-size: 12pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.sign-result-box p {
+  margin: 0;
+  font-size: 20pt;
+  font-weight: 700;
+  line-height: 1.16;
+}
+.sign-format {
+  margin: 0.28in 0 0;
+  font-size: 14pt;
+  line-height: 1.3;
+}
+.sign-format strong {
+  font-weight: 700;
+}
+.sign-timing-note {
+  margin: 0.16in 0 0;
+  font-size: 13pt;
+  line-height: 1.25;
+  font-weight: 600;
+  color: #355020;
+}
+.sign-spacer {
+  flex: 1;
+  min-height: 0.18in;
+}
+.sign-cta {
+  display: grid;
+  grid-template-columns: 1fr 1.65in;
+  gap: 0.22in;
+  align-items: center;
+  padding: 0.25in;
+  border-top: 4px solid #b9d734;
+  background: #172019;
+  color: #fff;
+}
+.sign-cta h2 {
+  margin: 0 0 0.09in;
+  color: #d8f35c;
+  font: 900 25pt/0.95 "Barlow Condensed", Impact, sans-serif;
+  text-transform: uppercase;
+}
+.sign-cta p {
+  margin: 0 0 0.11in;
+  font-size: 13pt;
+  line-height: 1.25;
+}
+.sign-cta .sign-url {
+  display: block;
+  color: #fff;
+  font-size: 14pt;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.08in;
+  overflow-wrap: anywhere;
+}
+.sign-qr {
+  width: 1.65in;
+  height: 1.65in;
+  padding: 0.1in;
+  border: 1px solid #d8f35c;
+  background: #fff;
+}
+.sign-qr-svg,
+.sign-qr-svg svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sign-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 0.17in;
+  color: #51604e;
+  font-size: 10.5pt;
+}
+.sign-footer strong {
+  color: #172019;
+  letter-spacing: 0.08em;
+}
+
+.sign-poster-content {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.sign-poster-title {
+  max-width: none;
+  font-size: 60pt;
+  line-height: 0.92;
+  text-align: center;
+  margin: 0 auto 0.4in;
+}
+.sign-poster-lead {
+  font-size: 22pt;
+  font-weight: 600;
+  margin: 0 auto 0.5in;
+  max-width: 6.5in;
+}
+.sign-poster-cta {
+  grid-template-columns: 1fr 2.3in;
+}
+.sign-poster-cta .sign-qr {
+  width: 2.3in;
+  height: 2.3in;
+}
