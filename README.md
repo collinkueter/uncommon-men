@@ -108,7 +108,7 @@ npx tsx scripts/migrate-to-multi-conference.ts --dry-run
 npx tsx scripts/migrate-to-multi-conference.ts
 ```
 
-Deploy the new `firestore.rules` and the app together, after the migration: the new rules no longer serve the top-level collections.
+Deploy the new `firestore.rules` and the app together, after the migration: the new rules no longer serve the top-level collections. The full production runbook (credentials, backups with `scripts/backup-firestore.ts`, deploy order, smoke tests, rollback) is [docs/DEPLOY.md](docs/DEPLOY.md).
 
 After an administrator role change, sign out and sign in again to refresh the Firebase token. No private service-account key belongs in the frontend or repository.
 
