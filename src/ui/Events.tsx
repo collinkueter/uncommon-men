@@ -11,7 +11,7 @@ import { useConference } from "@/lib/ConferenceContext";
 import { formatScore, getBestAttempt, overallStandings } from "@/domain/ranking";
 import type { Competition } from "@/domain/types";
 import { myParticipantId } from "./AttemptList";
-import { BottomNav, Empty, PageShell, ordinal, withDemo, scoreLabel } from "./shared";
+import { BottomNav, Empty, PageShell, ordinal, useConferenceLink, scoreLabel } from "./shared";
 import "./Events.css";
 
 const groups: Array<{ title: string; match: (event: Competition) => boolean; Icon: typeof Trophy }> = [
@@ -22,6 +22,7 @@ const groups: Array<{ title: string; match: (event: Competition) => boolean; Ico
 ];
 
 export function Events() {
+  const link = useConferenceLink();
   const { snapshot } = useConference();
   const [search, setSearch] = useState("");
   const firstName = snapshot.identity?.name?.trim().split(" ")[0];
@@ -46,10 +47,10 @@ export function Events() {
           <div className="identity-greeting">
             <p>
               Hey, {firstName}
-              <Link to={withDemo("/welcome")}>Change name</Link>
+              <Link to={link("/welcome")}>Change name</Link>
             </p>
             {standing && standing.rank > 0 && (
-              <Link className="my-standing" to={withDemo("/standings")}>
+              <Link className="my-standing" to={link("/standings")}>
                 <strong>{ordinal(standing.rank)}</strong> overall
                 <span>{Number(standing.points.toFixed(2))} pts</span>
                 <ChevronRight aria-hidden="true" />
@@ -85,7 +86,7 @@ export function Events() {
                     const mine = best(event);
                     return (
                       <li key={event.id}>
-                        <Link className="event-row" to={withDemo(`/events/${event.id}`)}>
+                        <Link className="event-row" to={link(`/events/${event.id}`)}>
                           <Icon className="event-icon" aria-hidden="true" />
                           <span className="event-name">
                             <strong>{event.name}</strong>

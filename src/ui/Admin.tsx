@@ -15,7 +15,7 @@ import type {
   Competition,
   ConferenceStore,
 } from "@/domain/types";
-import { Audit, Button, PageShell, nowId, withDemo } from "./shared";
+import { Audit, Button, PageShell, nowId, useConferenceLink } from "./shared";
 import { ThemedSelect } from "./ThemedSelect";
 
 function AdminParticipants({
@@ -136,6 +136,7 @@ function AdminEvents({
   snapshot: AppSnapshot;
   execute: ConferenceStore["execute"];
 }) {
+  const link = useConferenceLink();
   const blank = (): Competition => ({
     id: nowId(),
     categoryId: snapshot.data.categories[0]?.id ?? "",
@@ -276,12 +277,12 @@ function AdminEvents({
               </small>
             </div>
             {e.kind === "bracket" && (
-              <Link to={withDemo(`/events/${e.id}`)}>
+              <Link to={link(`/events/${e.id}`)}>
                 {e.team ? "Manage teams & bracket" : "Manage participants & bracket"}
               </Link>
             )}
             {e.kind === "knockout" && (
-              <Link to={withDemo(`/events/${e.id}`)}>Manage game</Link>
+              <Link to={link(`/events/${e.id}`)}>Manage game</Link>
             )}
             <Button type="button" onClick={() => setDraft(e)}>Edit</Button>
           </article>
@@ -310,7 +311,7 @@ export function Admin() {
   }, [tab]);
   if (!snapshot.identity?.admin)
     return (
-      <PageShell>
+      <PageShell lockWhenArchived={false}>
         <section className="admin-login">
           <ShieldCheck />
           <h1>ADMIN ACCESS</h1>
@@ -370,7 +371,7 @@ export function Admin() {
     }
   };
   return (
-    <PageShell>
+    <PageShell lockWhenArchived={false}>
       <section className="admin">
         <aside>
           <h2>ADMIN</h2>

@@ -5,10 +5,13 @@ import { useConference } from "@/lib/ConferenceContext";
 import { normalizeName } from "@/domain/ranking";
 import { findSimilarParticipants } from "@/domain/nameMatch";
 import type { ConferenceState, Participant } from "@/domain/types";
-import { Button, PageShell, withDemo } from "./shared";
+import { Button, PageShell, useConferenceLink } from "./shared";
+import { relativeConferencePath } from "@/lib/conferencePaths";
 import "./EntryForms.css";
 
-export function safeReturnPath(next: string | null) {
+/** A conference-relative return path; `/c/<slug>` prefixes are dropped. */
+export function safeReturnPath(value: string | null) {
+  const next = value && relativeConferencePath(value);
   return next &&
     next.startsWith("/") &&
     !next.startsWith("//") &&
@@ -104,6 +107,7 @@ function ParticipantOption({
 }
 
 export function Welcome() {
+  const link = useConferenceLink();
   const { snapshot, execute, signInWithGoogle, signOutAdmin } = useConference();
   const navigate = useNavigate();
   const location = useLocation();
@@ -135,7 +139,7 @@ export function Welcome() {
   }, [name, snapshot.data.participants]);
   const returnToNext = () => {
     const next = new URLSearchParams(location.search).get("next");
-    navigate(withDemo(safeReturnPath(next)));
+    navigate(link(safeReturnPath(next)));
   };
   // Google sign-in can switch to a different account; wait until that
   // account's profile has loaded before leaving this screen.
@@ -320,7 +324,7 @@ export function Welcome() {
             disabled={saving}
             onClick={() => {
               const next = new URLSearchParams(location.search).get("next");
-              navigate(withDemo(safeReturnPath(next)));
+              navigate(link(safeReturnPath(next)));
             }}
           >
             Cancel

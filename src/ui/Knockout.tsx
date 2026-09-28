@@ -5,10 +5,11 @@ import type { Competition } from "@/domain/types";
 import { useConference } from "@/lib/ConferenceContext";
 import { ParticipantPicker } from "./ParticipantPicker";
 import { HowToPlay } from "./HowToPlay";
-import { Button, Empty, PageShell, withDemo } from "./shared";
+import { Button, Empty, PageShell, useConferenceLink } from "./shared";
 import "./Knockout.css";
 
 export function Knockout({ event }: { event: Competition }) {
+  const link = useConferenceLink();
   const { snapshot, execute } = useConference();
   const game = snapshot.data.games?.find((item) => item.eventId === event.id);
   const myId = snapshot.identity?.participantId;
@@ -96,7 +97,7 @@ export function Knockout({ event }: { event: Competition }) {
   return (
     <PageShell>
       <section className="content knockout-page">
-        <Link className="back" to={withDemo("/events")}><ArrowLeft /> Events</Link>
+        <Link className="back" to={link("/events")}><ArrowLeft /> Events</Link>
         <h1>{event.name}</h1>
         <div className="pills scoring-pills"><span>Single-winner game</span></div>
         <HowToPlay instructions={event.instructions} />
@@ -106,7 +107,7 @@ export function Knockout({ event }: { event: Competition }) {
             <h2 id="knockout-signup-title">SIGN UP</h2>
             <p>Registration closes when an administrator starts the game.</p>
             {!snapshot.identity?.name.trim() ? (
-              <p><Link to={withDemo(`/welcome?next=${encodeURIComponent(`/events/${event.id}`)}`)}>Enter your name</Link> to sign up.</p>
+              <p><Link to={link(`/welcome?next=${encodeURIComponent(`/events/${event.id}`)}`)}>Enter your name</Link> to sign up.</p>
             ) : myId && entrants.includes(myId) ? (
               <p className="signup-done"><CheckCircle2 aria-hidden="true" /><span>You're signed up as <strong>{names.get(myId)}</strong>.</span></p>
             ) : myId ? (

@@ -11,7 +11,7 @@ import {
   RequireIdentity,
   formatDuration,
   parseDuration,
-  withDemo,
+  useConferenceLink,
   nowId,
   scoreLabel,
 } from "./shared";
@@ -56,6 +56,7 @@ export function ScoreEvent() {
   );
 }
 function ScoreForm({ event }: { event: Competition }) {
+  const link = useConferenceLink();
   const { snapshot, execute } = useConference();
   const timerKey = `uncommon-men:timer:${snapshot.mode}:${snapshot.identity?.uid}:${event.id}`;
   const savedTimer = useMemo(() => {
@@ -247,7 +248,7 @@ function ScoreForm({ event }: { event: Competition }) {
           void submit();
         }}
       >
-        <Link className="back" to={withDemo("/events")}>
+        <Link className="back" to={link("/events")}>
           <ArrowLeft /> Events
         </Link>
         <h1>{event.name}</h1>

@@ -4,7 +4,7 @@ import { useConference } from "@/lib/ConferenceContext";
 import { formatScore, getBestAttempt, overallStandings } from "@/domain/ranking";
 import type { Attempt, ConferenceState } from "@/domain/types";
 import { AttemptList, myParticipantId } from "./AttemptList";
-import { BottomNav, PageShell, RequireIdentity, ordinal, withDemo } from "./shared";
+import { BottomNav, PageShell, RequireIdentity, ordinal, useConferenceLink } from "./shared";
 import "./Results.css";
 
 export function isCountingAttempt(
@@ -18,6 +18,7 @@ export function isCountingAttempt(
 }
 
 export function Results() {
+  const link = useConferenceLink();
   const { snapshot } = useConference();
   const participantId = myParticipantId(snapshot);
   const attempts = snapshot.data.attempts
@@ -38,7 +39,7 @@ export function Results() {
         <section className="content">
           <h1>MY RESULTS</h1>
           {standing && standing.rank > 0 && (
-            <Link className="results-summary" to={withDemo("/standings")} aria-label={`${ordinal(standing.rank)} overall, ${Number(standing.points.toFixed(2))} points, ${standing.eventsPlayed} events. View standings`}>
+            <Link className="results-summary" to={link("/standings")} aria-label={`${ordinal(standing.rank)} overall, ${Number(standing.points.toFixed(2))} points, ${standing.eventsPlayed} events. View standings`}>
               <span><strong>{ordinal(standing.rank)}</strong><small>Overall</small></span>
               <span><strong>{Number(standing.points.toFixed(2))}</strong><small>Points</small></span>
               <span><strong>{standing.eventsPlayed}</strong><small>Events</small></span>
@@ -50,7 +51,7 @@ export function Results() {
               <ul>
                 {bests.map(({ event, attempt }) => (
                   <li key={event.id}>
-                    <Link to={withDemo(`/events/${event.id}`)}>
+                    <Link to={link(`/events/${event.id}`)}>
                       <span>{event.name}</span>
                       <strong>{formatScore(attempt.value, event)}{event.kind === "duration" ? "" : ` ${event.unit}`}</strong>
                     </Link>

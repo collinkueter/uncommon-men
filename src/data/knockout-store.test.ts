@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSeedState } from "./seed";
-import { createConferenceStore } from "./store";
+import { createConferenceStore, demoIdentityKey, demoStateKey } from "./store";
+
+const CONFERENCE = "uncommon-men-2026";
 
 const eventId = "lightning-knockout";
 
@@ -9,8 +11,8 @@ beforeEach(() => {
   data.events = data.events.map((event) => event.id === eventId ? { ...event, kind: "knockout" } : event);
   data.games = data.games.filter((game) => game.eventId !== eventId);
   const storage = new Map([
-    ["uncommon-men.demo-state.v1", JSON.stringify(data)],
-    ["uncommon-men.demo-identity", JSON.stringify({ name: "Public player" })],
+    [demoStateKey(CONFERENCE), JSON.stringify(data)],
+    [demoIdentityKey(CONFERENCE), JSON.stringify({ name: "Public player" })],
   ]);
   vi.stubGlobal("window", { location: { search: "?demo=1" } });
   vi.stubGlobal("localStorage", {
@@ -23,7 +25,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("knockout games", () => {
   it("registers named participants, starts administratively, and records one winner", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     await store.signOutAdmin();
     const [first, second] = store.getSnapshot().data.participants;
     await store.execute({ type: "joinGame", eventId, participantId: first.id });
@@ -41,14 +43,14 @@ describe("knockout games", () => {
   });
 
   it("rejects numeric scoring for knockout events", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     const participant = store.getSnapshot().data.participants[0];
     await expect(store.execute({ type: "attempt", eventId, name: participant.name, participantId: participant.id, value: 1, requestId: "numeric-knockout" })).rejects.toThrow(/winners/);
     store.dispose();
   });
 
   it("rejects unknown entrants and stale or unjustified winner corrections", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     await store.signOutAdmin();
     const [first, second] = store.getSnapshot().data.participants;
     await expect(store.execute({ type: "joinGame", eventId, participantId: "missing" })).rejects.toThrow(/invalid/);

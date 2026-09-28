@@ -12,7 +12,7 @@ vi.mock("@/lib/ConferenceContext", () => ({ useConference: () => context }));
 vi.mock("./shared", () => ({
   PageShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
   Button: (props: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
-  withDemo: (path: string) => path,
+  useConferenceLink: () => (path: string) => `/c/test-conference${path}`,
   useMediaQuery: () => false,
 }));
 
@@ -24,7 +24,7 @@ function renderBracket(eventId = "table-tennis") {
 beforeEach(() => {
   const data = createSeedState();
   data.brackets = [createBracket("table-tennis", data.participants.slice(0, 3).map((p) => p.id))];
-  context.snapshot = { data, identity: { uid: "test", name: "Test", admin: false }, loading: false, identityLoading: false, error: null, mode: "demo", connected: true };
+  context.snapshot = { conferenceId: "test-conference", conference: null, conferenceState: "ready", data, identity: { uid: "test", name: "Test", admin: false }, loading: false, identityLoading: false, error: null, mode: "demo", connected: true };
 });
 
 describe("bracket presentation", () => {
@@ -85,7 +85,7 @@ describe("bracket presentation", () => {
     const html = renderBracket("cornhole");
     expect(html).toContain("Save team");
     expect(html).toContain("An administrator must start this bracket after teams are registered.");
-    expect(html).toContain('href="/admin"');
+    expect(html).toContain('href="/c/test-conference/admin"');
     expect(html).not.toContain("Start bracket");
   });
 

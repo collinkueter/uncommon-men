@@ -4,7 +4,13 @@ export interface Category { id: string; name: string; group: 'physical' | 'menta
 export interface Competition { id: string; categoryId: string; name: string; kind: ScoreKind; direction: Direction; unit: string; team: boolean; teamSize: number; instructions: string; active: boolean }
 export interface Participant { id: string; name: string; normalizedName: string }
 export interface Team { id: string; eventId: string; name: string; memberIds: string[] }
-export interface Identity { uid: string; name: string; participantId?: string; admin: boolean; email?: string }
+/**
+ * The signed-in person within one conference. `admin` means conference admin of
+ * THIS conference (custom claim admin, a platformRoles document, or a
+ * conferences/{cid}/admins document for the verified Google email); `organizer`
+ * means platform organizer (custom claim or platformRoles document).
+ */
+export interface Identity { uid: string; name: string; participantId?: string; admin: boolean; organizer?: boolean; email?: string }
 export interface Attempt { id: string; eventId: string; participantId: string; value: number; valid: boolean; recordedBy: string; recorderName: string; createdAt: number; updatedAt: number; revision: number }
 export interface Match { id: string; round: number; position: number; sideA: string | null; sideB: string | null; winnerId: string | null; bye: boolean }
 export interface Bracket { id: string; eventId: string; entrants: string[]; matches: Match[]; status: 'registration' | 'active' | 'complete'; revision: number; entrantsOpen?: boolean }
@@ -12,7 +18,17 @@ export interface KnockoutGame { id: string; eventId: string; entrants: string[];
 export interface AuditEntry { id: string; action: string; entityType: string; entityId: string; actorUid: string; actorName: string; at: number; before: unknown; after: unknown; reason: string }
 export interface ConferenceState { categories: Category[]; events: Competition[]; participants: Participant[]; teams: Team[]; attempts: Attempt[]; brackets: Bracket[]; games: KnockoutGame[]; audit: AuditEntry[] }
 export interface Standing { id: string; name: string; rank: number; points: number; value: number; eventsPlayed: number }
-export interface AppSnapshot { data: ConferenceState; identity: Identity | null; loading: boolean; identityLoading: boolean; error: string | null; mode: 'demo' | 'firebase'; connected: boolean }
+export type ConferenceStatus = 'draft' | 'live' | 'archived';
+/** conferences/{id}. `slug` always equals `id`; dates are ISO calendar dates (YYYY-MM-DD). */
+export interface Conference { id: string; name: string; slug: string; startDate: string; endDate: string; location: string; status: ConferenceStatus; createdAt?: number }
+/** settings/platform */
+export interface PlatformSettings { defaultConferenceId: string }
+/**
+ * `conference` is null until loaded and when missing. `conferenceState` tells
+ * those apart: 'missing' covers both a nonexistent conference and a draft the
+ * viewer may not see.
+ */
+export interface AppSnapshot { conferenceId: string; conference: Conference | null; conferenceState: 'loading' | 'ready' | 'missing'; data: ConferenceState; identity: Identity | null; loading: boolean; identityLoading: boolean; error: string | null; mode: 'demo' | 'firebase'; connected: boolean }
 export type Command =
  | { type: 'identity'; name: string; participantId?: string }
  | { type: 'attempt'; eventId: string; name: string; participantId?: string; value: number; requestId: string }

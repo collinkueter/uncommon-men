@@ -1,13 +1,9 @@
-import { FirebaseError, initializeApp } from "firebase/app";
+import { FirebaseError } from "firebase/app";
 import {
   GoogleAuthProvider,
-  browserLocalPersistence,
-  connectAuthEmulator,
-  getAuth,
   getIdTokenResult,
   linkWithPopup,
   onAuthStateChanged,
-  setPersistence,
   signInAnonymously,
   signInWithCredential,
   signInWithPopup,
@@ -18,17 +14,13 @@ import {
 import {
   Timestamp,
   collection,
-  connectFirestoreEmulator,
   doc,
   getDoc,
   getDocFromCache,
-  getFirestore,
-  initializeFirestore,
   onSnapshot,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   runTransaction,
   serverTimestamp,
+  type DocumentReference,
   type Firestore,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -41,6 +33,7 @@ import type {
   Bracket,
   Command,
   Competition,
+  Conference,
   ConferenceState,
   ConferenceStore,
   Identity,
@@ -48,11 +41,21 @@ import type {
   Participant,
 } from "@/domain/types";
 import { log } from "@/lib/logging/logger";
+import { DEFAULT_CONFERENCE_ID } from "@/lib/conferencePaths";
 import { DEMO_RECORDED_AT } from "./demoClock";
+import { getFirebaseServices } from "./firebase";
 
-const IDENTITY_KEY = "uncommon-men.identity";
-const DEMO_IDENTITY_KEY = "uncommon-men.demo-identity";
-const DEMO_KEY = "uncommon-men.demo-state.v1";
+// Browser-local keys are namespaced by conference id, because participants and
+// identities are separate per conference. The pre-multi-conference keys are
+// still read (never written) for the default conference.
+const LEGACY_IDENTITY_KEY = "uncommon-men.identity";
+const LEGACY_DEMO_IDENTITY_KEY = "uncommon-men.demo-identity";
+const LEGACY_DEMO_KEY = "uncommon-men.demo-state.v1";
+export const identityKey = (conferenceId: string) => `${LEGACY_IDENTITY_KEY}.${conferenceId}`;
+export const demoIdentityKey = (conferenceId: string) => `${LEGACY_DEMO_IDENTITY_KEY}.${conferenceId}`;
+export const demoStateKey = (conferenceId: string) => `${LEGACY_DEMO_KEY}.${conferenceId}`;
+export const ARCHIVED_MESSAGE = "This conference is archived. Its results are read-only.";
+export const CONFERENCE_NOT_FOUND = "Conference not found.";
 const LEGACY_DEMO_RECORDED_AT = 1_726_000_000_000;
 const LEGACY_DEMO_WINDOW_MS = 2 * 60 * 1000;
 const CATALOG_SETUP_ERROR =
@@ -75,6 +78,7 @@ const publicCollections = collections.filter(
   (name): name is PublicCollection => name !== "audit",
 );
 const PENDING_WRITE_TTL_MS = 60_000;
+const ROLE_LOOKUP_TIMEOUT_MS = 5_000;
 
 const emptyState = (): ConferenceState => ({
   categories: [],
@@ -191,36 +195,72 @@ export function migrateLegacyDemoDates(data: ConferenceState): ConferenceState {
   };
 }
 
-function readRememberedIdentity(): Pick<
+function readScoped(conferenceId: string, key: string, legacyKey: string): string | null {
+  const scoped = localStorage.getItem(key);
+  if (scoped !== null || conferenceId !== DEFAULT_CONFERENCE_ID) return scoped;
+  return localStorage.getItem(legacyKey);
+}
+
+function readRememberedIdentity(conferenceId: string): Pick<
   Identity,
   "name" | "participantId"
 > | null {
   try {
-    const raw = localStorage.getItem(IDENTITY_KEY);
+    const raw = readScoped(conferenceId, identityKey(conferenceId), LEGACY_IDENTITY_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-function readDemoIdentity(): Pick<Identity, "name" | "participantId"> | null {
+function readDemoIdentity(conferenceId: string): Pick<Identity, "name" | "participantId"> | null {
   try {
-    const raw = localStorage.getItem(DEMO_IDENTITY_KEY);
+    const raw = readScoped(conferenceId, demoIdentityKey(conferenceId), LEGACY_DEMO_IDENTITY_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-function rememberIdentity(identity: Identity | null) {
+function rememberIdentity(conferenceId: string, identity: Identity | null) {
   if (!identity) return;
-  localStorage.setItem(
-    IDENTITY_KEY,
-    JSON.stringify({
-      name: identity.name,
-      participantId: identity.participantId,
-    }),
-  );
+  try {
+    localStorage.setItem(
+      identityKey(conferenceId),
+      JSON.stringify({
+        name: identity.name,
+        participantId: identity.participantId,
+      }),
+    );
+  } catch {
+    /* storage may be disabled */
+  }
+}
+
+/** The sample conference shown by ?demo=1 for any slug. */
+export function demoConference(conferenceId: string): Conference {
+  return {
+    id: conferenceId,
+    slug: conferenceId,
+    name: conferenceId === DEFAULT_CONFERENCE_ID ? "Uncommon Men 2026" : `Sample conference (${conferenceId})`,
+    startDate: "2026-09-22",
+    endDate: "2026-09-24",
+    location: "Sample venue",
+    status: "live",
+  };
+}
+
+function toConference(id: string, value: Record<string, unknown>): Conference {
+  return {
+    id,
+    slug: id,
+    name: String(value.name ?? id),
+    startDate: String(value.startDate ?? ""),
+    endDate: String(value.endDate ?? ""),
+    location: String(value.location ?? ""),
+    status: value.status === "draft" || value.status === "archived" ? value.status : "live",
+    createdAt: toMillis(value.createdAt) || undefined,
+  };
 }
 
 function toMillis(value: unknown): number {
@@ -281,6 +321,14 @@ abstract class BaseStore implements ConferenceStore {
     this.snapshot = { ...this.snapshot, error: null };
     this.emit();
   };
+  // Every write is scoped to a conference that exists, is visible, and is not
+  // archived. The rules enforce the same; this gives a friendly message first.
+  protected assertWritable() {
+    const { conference, conferenceState } = this.snapshot;
+    if (conferenceState === "missing") throw new Error(CONFERENCE_NOT_FOUND);
+    if (!conference) throw new Error("The conference is still loading. Try again in a moment.");
+    if (conference.status === "archived") throw new Error(ARCHIVED_MESSAGE);
+  }
   abstract execute(command: Command): Promise<void>;
   abstract signInWithGoogle(preferredName?: string): Promise<void>;
   abstract signInAdmin(): Promise<void>;
@@ -289,25 +337,32 @@ abstract class BaseStore implements ConferenceStore {
 }
 
 class DemoStore extends BaseStore {
-  constructor(createSeedState: () => ConferenceState) {
+  private readonly stateKey: string;
+  private readonly identityKey: string;
+  constructor(conferenceId: string, createSeedState: () => ConferenceState) {
     let data = createSeedState();
+    const stateKey = demoStateKey(conferenceId);
     try {
-      const saved = localStorage.getItem(DEMO_KEY);
+      const saved = readScoped(conferenceId, stateKey, LEGACY_DEMO_KEY);
       if (saved) {
         data = migrateLegacyDemoDates(JSON.parse(saved));
-        localStorage.setItem(DEMO_KEY, JSON.stringify(data));
+        localStorage.setItem(stateKey, JSON.stringify(data));
       }
     } catch {
       /* storage may be disabled */
     }
-    const remembered = readDemoIdentity();
+    const remembered = readDemoIdentity(conferenceId);
     super({
+      conferenceId,
+      conference: demoConference(conferenceId),
+      conferenceState: "ready",
       data,
       identity: {
         uid: "demo-operator",
         name: remembered?.name || "",
         participantId: remembered?.participantId,
         admin: true,
+        organizer: true,
       },
       loading: false,
       identityLoading: false,
@@ -315,11 +370,27 @@ class DemoStore extends BaseStore {
       mode: "demo",
       connected: true,
     });
+    this.stateKey = stateKey;
+    this.identityKey = demoIdentityKey(conferenceId);
   }
   private commit(data: ConferenceState) {
     this.snapshot = { ...this.snapshot, data };
-    localStorage.setItem(DEMO_KEY, JSON.stringify(data));
+    try {
+      localStorage.setItem(this.stateKey, JSON.stringify(data));
+    } catch {
+      /* storage may be disabled */
+    }
     this.emit();
+  }
+  private rememberDemoIdentity(identity: Identity) {
+    try {
+      localStorage.setItem(
+        this.identityKey,
+        JSON.stringify({ name: identity.name, participantId: identity.participantId }),
+      );
+    } catch {
+      /* storage may be disabled */
+    }
   }
   async execute(command: Command) {
     if (this.snapshot.error) {
@@ -327,6 +398,7 @@ class DemoStore extends BaseStore {
       this.emit();
     }
     try {
+      this.assertWritable();
       const data = clone(this.snapshot.data);
       const actor = this.snapshot.identity!;
       if (command.type === "identity") {
@@ -373,13 +445,7 @@ class DemoStore extends BaseStore {
           name: participant.name,
           participantId: participant.id,
         };
-        localStorage.setItem(
-          DEMO_IDENTITY_KEY,
-          JSON.stringify({
-            name: identity.name,
-            participantId: identity.participantId,
-          }),
-        );
+        this.rememberDemoIdentity(identity);
         data.audit.unshift({
           id: randomId(),
           action: "identity",
@@ -452,13 +518,7 @@ class DemoStore extends BaseStore {
             reason: "Linked first result",
           });
           this.snapshot = { ...this.snapshot, identity: linked };
-          localStorage.setItem(
-            DEMO_IDENTITY_KEY,
-            JSON.stringify({
-              name: linked.name,
-              participantId: linked.participantId,
-            }),
-          );
+          this.rememberDemoIdentity(linked);
         }
         after = {
           id: command.requestId,
@@ -738,14 +798,14 @@ class DemoStore extends BaseStore {
   async signInAdmin() {
     this.snapshot = {
       ...this.snapshot,
-      identity: { ...this.snapshot.identity!, admin: true },
+      identity: { ...this.snapshot.identity!, admin: true, organizer: true },
     };
     this.emit();
   }
   async signOutAdmin() {
     this.snapshot = {
       ...this.snapshot,
-      identity: { ...this.snapshot.identity!, admin: false },
+      identity: { ...this.snapshot.identity!, admin: false, organizer: false },
     };
     this.emit();
   }
@@ -755,12 +815,26 @@ class DemoStore extends BaseStore {
 }
 
 class FirebaseStore extends BaseStore {
+  private readonly cid: string;
   private auth?: Auth;
   private db?: Firestore;
+  private disposed = false;
   private unsubscribers: Unsubscribe[] = [];
+  private collectionUnsubscribers = new Map<PublicCollection, Unsubscribe>();
+  // Collections whose listener was refused, e.g. a draft conference before its
+  // admin has signed in. They are retried when the viewer's roles change.
+  private deniedCollections = new Set<PublicCollection>();
+  private conferenceUnsubscribe?: Unsubscribe;
+  private conferenceDenied = false;
+  private conferenceWaiters: (() => void)[] = [];
+  // Set when sign-in finished while the conference was missing or hidden, so
+  // no identity was loaded; the identity flow reruns once it becomes visible.
+  private identitySkipped = false;
   private loaded = new Set<CollectionName>();
   private auditUnsubscribe?: Unsubscribe;
   private identityUnsubscribe?: Unsubscribe;
+  private roleUnsubscribers: Unsubscribe[] = [];
+  private roles = { claim: false, platform: false, conference: false };
   private authRevision = 0;
   private authRetryTimer?: ReturnType<typeof setTimeout>;
   private authRetryDelay = 0;
@@ -813,8 +887,15 @@ class FirebaseStore extends BaseStore {
     this.snapshot = { ...this.snapshot, connected: false };
     this.emit();
   };
-  constructor() {
+  /** A document inside this conference: conferences/{cid}/...segments. */
+  private d(db: Firestore, ...segments: string[]): DocumentReference {
+    return doc(db, "conferences", this.cid, ...segments);
+  }
+  constructor(conferenceId: string) {
     super({
+      conferenceId,
+      conference: null,
+      conferenceState: "loading",
       data: emptyState(),
       identity: null,
       loading: true,
@@ -823,115 +904,157 @@ class FirebaseStore extends BaseStore {
       mode: "firebase",
       connected: false,
     });
+    this.cid = conferenceId;
     void this.initialize();
   }
   private async initialize() {
-    const config = {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    };
-    if (Object.values(config).some((value) => !value)) {
-      this.fail(
-        new Error(
-          "Firebase is not configured. Add the VITE_FIREBASE_* environment variables, or open ?demo=1 for the local preview.",
-        ),
-        "all",
-      );
-      return;
-    }
     try {
-      const app = initializeApp(config);
-      this.auth = getAuth(app);
-      this.db = initializeFirestore(
-        app,
-        {
-          localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager(),
-          }),
-        },
-        import.meta.env.VITE_FIREBASE_DATABASE_ID || "conference",
-      );
-      if (import.meta.env.VITE_FIREBASE_EMULATORS === "true") {
-        connectAuthEmulator(
-          this.auth,
-          `http://127.0.0.1:${import.meta.env.VITE_AUTH_EMULATOR_PORT || "9199"}`,
-          { disableWarnings: true },
-        );
-        connectFirestoreEmulator(
-          this.db,
-          "127.0.0.1",
-          Number(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT || 8180),
-        );
-      }
-      await setPersistence(this.auth, browserLocalPersistence);
+      const { auth, db, ready } = getFirebaseServices();
+      this.auth = auth;
+      this.db = db;
+      await ready;
+      if (this.disposed) return;
       window.addEventListener("online", this.online);
       window.addEventListener("offline", this.offline);
+      this.listenConference();
+      for (const name of publicCollections) this.listenCollection(name);
       this.unsubscribers.push(
         onAuthStateChanged(this.auth, (user) => void this.handleUser(user)),
       );
-      for (const name of publicCollections)
-        this.unsubscribers.push(
-          onSnapshot(
-            collection(this.db, name),
-            { includeMetadataChanges: true },
-            (result) => {
-              const nextConnected =
-                this.snapshot.connected || !result.metadata.fromCache;
-              if (
-                this.loaded.has(name) &&
-                result.docChanges().length === 0 &&
-                nextConnected === this.snapshot.connected
-              )
-                return;
-              let values = this.withPending(
-                name,
-                result.docs.map((item) => fromFirestore(item.id, item.data())),
-              );
-              if (name === "categories")
-                values.sort(
-                  (left, right) =>
-                    Number(left.order ?? 0) - Number(right.order ?? 0),
-                );
-              if (name === "attempts")
-                values.sort(
-                  (left, right) =>
-                    Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0),
-                );
-              const data = {
-                ...this.snapshot.data,
-                [name]: values,
-              } as ConferenceState;
-              if (name === "categories" || name === "events")
-                this.catalogReady.set(name, values.length > 0);
-              this.loaded.add(name);
-              const catalogMissing =
-                this.catalogReady.size === 2 &&
-                [...this.catalogReady.values()].some((ready) => !ready);
-              const catalogRestored =
-                this.catalogReady.size === 2 &&
-                [...this.catalogReady.values()].every(Boolean);
-              this.snapshot = {
-                ...this.snapshot,
-                data,
-                loading: this.loaded.size < publicCollections.length,
-                error: catalogMissing
-                  ? CATALOG_SETUP_ERROR
-                  : catalogRestored &&
-                      this.snapshot.error === CATALOG_SETUP_ERROR
-                    ? null
-                    : this.snapshot.error,
-                connected: nextConnected,
-              };
-              this.emit();
-            },
-            (error) => this.fail(error),
-          ),
-        );
     } catch (error) {
       this.fail(error, "all");
     }
+  }
+  private setConferenceState(
+    conferenceState: "loading" | "ready" | "missing",
+    conference: Conference | null,
+  ) {
+    this.snapshot = { ...this.snapshot, conferenceState, conference };
+    this.emit();
+    if (conferenceState === "ready" && this.identitySkipped) {
+      this.identitySkipped = false;
+      void this.handleUser(this.auth?.currentUser ?? null);
+    }
+    if (conferenceState !== "loading") {
+      const waiters = this.conferenceWaiters;
+      this.conferenceWaiters = [];
+      waiters.forEach((resolve) => resolve());
+    }
+  }
+  private conferenceSettled() {
+    if (this.snapshot.conferenceState !== "loading") return Promise.resolve();
+    return new Promise<void>((resolve) => this.conferenceWaiters.push(resolve));
+  }
+  private listenConference() {
+    this.conferenceUnsubscribe?.();
+    this.conferenceUnsubscribe = onSnapshot(
+      doc(this.db!, "conferences", this.cid),
+      (result) => {
+        this.conferenceDenied = false;
+        if (!result.metadata.fromCache && !this.snapshot.connected)
+          this.snapshot = { ...this.snapshot, connected: true };
+        if (result.exists()) {
+          this.setConferenceState("ready", toConference(result.id, result.data()));
+          return;
+        }
+        // An uncached document reads as missing from the local cache before the
+        // server answers; wait for the server unless the device is offline.
+        if (result.metadata.fromCache && navigator.onLine !== false) return;
+        this.setConferenceState("missing", null);
+      },
+      (error) => {
+        // Drafts are unreadable to everyone but their admins; to other visitors
+        // they look exactly like a conference that does not exist.
+        if (error.code === "permission-denied") {
+          this.conferenceDenied = true;
+          // Only the server refuses a read, so the device is online.
+          this.snapshot = { ...this.snapshot, connected: true };
+        } else log.error("Conference listener failed", { error: error.message });
+        this.setConferenceState("missing", null);
+      },
+    );
+  }
+  private listenCollection(name: PublicCollection) {
+    this.collectionUnsubscribers.get(name)?.();
+    this.collectionUnsubscribers.set(
+      name,
+      onSnapshot(
+        collection(this.db!, "conferences", this.cid, name),
+        { includeMetadataChanges: true },
+        (result) => {
+          const nextConnected =
+            this.snapshot.connected || !result.metadata.fromCache;
+          if (
+            this.loaded.has(name) &&
+            result.docChanges().length === 0 &&
+            nextConnected === this.snapshot.connected
+          )
+            return;
+          let values = this.withPending(
+            name,
+            result.docs.map((item) => fromFirestore(item.id, item.data())),
+          );
+          if (name === "categories")
+            values.sort(
+              (left, right) =>
+                Number(left.order ?? 0) - Number(right.order ?? 0),
+            );
+          if (name === "attempts")
+            values.sort(
+              (left, right) =>
+                Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0),
+            );
+          const data = {
+            ...this.snapshot.data,
+            [name]: values,
+          } as ConferenceState;
+          if (name === "categories" || name === "events")
+            this.catalogReady.set(name, values.length > 0);
+          this.loaded.add(name);
+          const catalogMissing =
+            this.catalogReady.size === 2 &&
+            [...this.catalogReady.values()].some((ready) => !ready);
+          const catalogRestored =
+            this.catalogReady.size === 2 &&
+            [...this.catalogReady.values()].every(Boolean);
+          this.snapshot = {
+            ...this.snapshot,
+            data,
+            loading: this.loaded.size < publicCollections.length,
+            error: catalogMissing
+              ? CATALOG_SETUP_ERROR
+              : catalogRestored &&
+                  this.snapshot.error === CATALOG_SETUP_ERROR
+                ? null
+                : this.snapshot.error,
+            connected: nextConnected,
+          };
+          this.emit();
+        },
+        (error) => {
+          if (error.code !== "permission-denied") return this.fail(error);
+          // A missing or hidden draft conference: the not-found state explains
+          // it, so no error banner. Retried if the viewer turns out to be an admin.
+          this.deniedCollections.add(name);
+          this.loaded.add(name);
+          this.snapshot = {
+            ...this.snapshot,
+            loading: this.loaded.size < publicCollections.length,
+          };
+          this.emit();
+        },
+      ),
+    );
+  }
+  private retryDenied() {
+    if (this.conferenceDenied) {
+      this.conferenceDenied = false;
+      this.setConferenceState("loading", null);
+      this.listenConference();
+    }
+    const denied = [...this.deniedCollections];
+    this.deniedCollections.clear();
+    denied.forEach((name) => this.listenCollection(name));
   }
   // Sign-in failures (for example the per-IP anonymous sign-up limit on shared
   // conference Wi-Fi) must never leave the app stuck loading. Public data stays
@@ -957,13 +1080,127 @@ class FirebaseStore extends BaseStore {
     }
     this.authErrorMessage = null;
   }
+  private currentRoles() {
+    const organizer = this.roles.claim || this.roles.platform;
+    return { organizer, admin: organizer || this.roles.conference };
+  }
+  // Roles come from the custom claim plus two documents keyed by the verified
+  // Google email: platformRoles/{email} (organizer) and
+  // conferences/{cid}/admins/{email} (conference admin). Both are listened to,
+  // so a grant or revoke applies without signing in again. Resolves once both
+  // have answered.
+  private watchRoles(user: User, claimAdmin: boolean, revision: number) {
+    this.roleUnsubscribers.forEach((unsubscribe) => unsubscribe());
+    this.roleUnsubscribers = [];
+    this.roles = { claim: claimAdmin, platform: false, conference: false };
+    const email =
+      !user.isAnonymous && user.emailVerified && user.email
+        ? user.email.toLowerCase()
+        : null;
+    if (!email) return Promise.resolve();
+    const sources = {
+      platform: doc(this.db!, "platformRoles", email),
+      conference: this.d(this.db!, "admins", email),
+    } as const;
+    return new Promise<void>((resolve) => {
+      // A slow or offline network must not hold the page; late answers still
+      // apply through applyRoles().
+      let settled = false;
+      const timer = setTimeout(() => {
+        settled = true;
+        resolve();
+      }, ROLE_LOOKUP_TIMEOUT_MS);
+      let pending = 2;
+      for (const key of ["platform", "conference"] as const) {
+        let first = true;
+        const settle = (held: boolean) => {
+          if (revision !== this.authRevision) return;
+          this.roles = { ...this.roles, [key]: held };
+          if (first) {
+            first = false;
+            pending -= 1;
+          }
+          if (settled) return this.applyRoles();
+          if (pending === 0) {
+            settled = true;
+            clearTimeout(timer);
+            resolve();
+          }
+        };
+        this.roleUnsubscribers.push(
+          onSnapshot(
+            sources[key],
+            (result) => settle(result.exists()),
+            (error) => {
+              log.warn("Role lookup failed", { role: key, error: error.message });
+              settle(false);
+            },
+          ),
+        );
+      }
+    });
+  }
+  private applyRoles() {
+    const { admin, organizer } = this.currentRoles();
+    const identity = this.snapshot.identity;
+    if (admin) this.retryDenied();
+    if (!identity) return;
+    if (identity.admin !== admin || identity.organizer !== organizer) {
+      this.snapshot = {
+        ...this.snapshot,
+        identity: { ...identity, admin, organizer },
+        data: admin ? this.snapshot.data : { ...this.snapshot.data, audit: [] },
+      };
+      this.emit();
+    }
+    if (admin) this.listenAudit(identity.uid);
+    else {
+      this.auditUnsubscribe?.();
+      this.auditUnsubscribe = undefined;
+    }
+  }
+  private listenAudit(uid: string) {
+    if (this.auditUnsubscribe) return;
+    this.auditUnsubscribe = onSnapshot(
+      collection(this.db!, "conferences", this.cid, "audit"),
+      (result) => {
+        if (
+          this.snapshot.identity?.uid !== uid ||
+          !this.snapshot.identity.admin
+        )
+          return;
+        const audit = result.docs
+          .map(
+            (item) =>
+              fromFirestore(item.id, item.data()) as unknown as AuditEntry,
+          )
+          .sort((left, right) => right.at - left.at);
+        this.snapshot = {
+          ...this.snapshot,
+          data: {
+            ...this.snapshot.data,
+            audit,
+          },
+        };
+        this.emit();
+      },
+      (error) => {
+        this.auditUnsubscribe = undefined;
+        this.fail(error, "identity");
+      },
+    );
+  }
   private async handleUser(user: User | null) {
+    if (this.disposed) return;
     const revision = ++this.authRevision;
+    this.identitySkipped = false;
     clearTimeout(this.authRetryTimer);
     this.auditUnsubscribe?.();
     this.auditUnsubscribe = undefined;
     this.identityUnsubscribe?.();
     this.identityUnsubscribe = undefined;
+    this.roleUnsubscribers.forEach((unsubscribe) => unsubscribe());
+    this.roleUnsubscribers = [];
     this.snapshot = {
       ...this.snapshot,
       identity: null,
@@ -980,31 +1217,57 @@ class FirebaseStore extends BaseStore {
       return;
     }
     try {
-      const identityRef = doc(this.db!, "identities", user.uid);
+      const token = await getIdTokenResult(user);
+      if (revision !== this.authRevision) return;
+      await this.watchRoles(user, token.claims.admin === true, revision);
+      if (revision !== this.authRevision) return;
+      // A draft conference becomes readable once an admin is recognized.
+      if (this.currentRoles().admin) this.retryDenied();
+      await this.conferenceSettled();
+      if (revision !== this.authRevision) return;
+      const remembered = readRememberedIdentity(this.cid);
+      const base: Identity = {
+        uid: user.uid,
+        name: remembered?.name || user.displayName || "",
+        participantId: undefined,
+        ...this.currentRoles(),
+        email: user.isAnonymous ? undefined : user.email || undefined,
+      };
+      if (this.snapshot.conferenceState !== "ready") {
+        // Nothing to join: the page shows that the conference was not found.
+        this.identitySkipped = true;
+        this.snapshot = { ...this.snapshot, identity: base, identityLoading: false };
+        this.emit();
+        this.clearAuthError();
+        return;
+      }
+      const identityRef = this.d(this.db!, "identities", user.uid);
       // A returning visitor's identity is read from the local cache so a slow
       // network does not hold the page; the listener below catches it up.
-      const [token, identityDocument] = await Promise.all([
-        getIdTokenResult(user),
-        getDocFromCache(identityRef).catch(() => getDoc(identityRef)),
-      ]);
+      const identityDocument = await getDocFromCache(identityRef).catch(() =>
+        getDoc(identityRef),
+      );
       if (revision !== this.authRevision) return;
-      const remembered = readRememberedIdentity();
       let identity: Identity = {
-        uid: user.uid,
+        ...base,
         name: identityDocument.exists()
           ? String(identityDocument.data().name)
-          : remembered?.name || user.displayName || "",
+          : base.name,
         participantId: identityDocument.exists()
           ? identityDocument.data().participantId || undefined
           : undefined,
-        admin: token.claims.admin === true,
-        email: user.isAnonymous ? undefined : user.email || undefined,
+        ...this.currentRoles(),
       };
       this.snapshot = { ...this.snapshot, identity, identityLoading: false };
       this.emit();
       // A new account with a remembered name, or a name saved before names
-      // joined the roster, gets its roster record now.
-      if (identity.name && !identity.participantId) {
+      // joined the roster, gets its roster record now. Archived conferences
+      // accept no writes.
+      if (
+        identity.name &&
+        !identity.participantId &&
+        this.snapshot.conference?.status !== "archived"
+      ) {
         try {
           const saved = await this.saveIdentityWithParticipant(
             user.uid,
@@ -1012,8 +1275,8 @@ class FirebaseStore extends BaseStore {
             undefined,
           );
           if (revision !== this.authRevision) return;
-          identity = { ...identity, name: saved.name, participantId: saved.id };
-          rememberIdentity(identity);
+          identity = { ...this.snapshot.identity!, name: saved.name, participantId: saved.id };
+          rememberIdentity(this.cid, identity);
           this.snapshot = { ...this.snapshot, identity };
           this.emit();
         } catch (error) {
@@ -1034,38 +1297,13 @@ class FirebaseStore extends BaseStore {
             name: String(data.name),
             participantId: data.participantId || undefined,
           } as Identity;
-          rememberIdentity(next);
+          rememberIdentity(this.cid, next);
           this.snapshot = { ...this.snapshot, identity: next };
           this.emit();
         },
         (error) => this.fail(error, "identity"),
       );
-      if (token.claims.admin === true)
-        this.auditUnsubscribe = onSnapshot(
-          collection(this.db!, "audit"),
-          (result) => {
-            if (
-              this.snapshot.identity?.uid !== user.uid ||
-              !this.snapshot.identity.admin
-            )
-              return;
-            const audit = result.docs
-              .map(
-                (item) =>
-                  fromFirestore(item.id, item.data()) as unknown as AuditEntry,
-              )
-              .sort((left, right) => right.at - left.at);
-            this.snapshot = {
-              ...this.snapshot,
-              data: {
-                ...this.snapshot.data,
-                audit,
-              },
-            };
-            this.emit();
-          },
-          (error) => this.fail(error, "identity"),
-        );
+      this.applyRoles();
       this.clearAuthError();
     } catch (error) {
       this.fail(error, "identity");
@@ -1094,9 +1332,9 @@ class FirebaseStore extends BaseStore {
     actorName?: string,
   ) {
     const { db, actor } = this.requireReady();
-    const target = doc(db, path);
+    const target = doc(db, `conferences/${this.cid}/${path}`);
     const auditId = randomId();
-    const auditRef = doc(db, "audit", auditId);
+    const auditRef = this.d(db, "audit", auditId);
     await runTransaction(db, async (transaction) => {
       const existing = await transaction.get(target);
       const before = existing.exists() ? existing.data() : null;
@@ -1133,8 +1371,8 @@ class FirebaseStore extends BaseStore {
     const normalizedName = normalizeName(name);
     if (!name.trim()) throw new Error("Enter your name.");
     if (name.length > 80) throw new Error("Your name must be 80 characters or fewer.");
-    const identityRef = doc(db, "identities", uid);
-    const identityAuditRef = doc(db, "audit", randomId());
+    const identityRef = this.d(db, "identities", uid);
+    const identityAuditRef = this.d(db, "audit", randomId());
     let savedName = name;
     let savedId = participantId;
     await retryOnRace(() =>
@@ -1150,7 +1388,7 @@ class FirebaseStore extends BaseStore {
             (item) => item.normalizedName === normalizedName,
           )?.id ??
           (await participantDocumentId(normalizedName));
-        const participantRef = doc(db, "participants", targetId);
+        const participantRef = this.d(db, "participants", targetId);
         const participantSnapshot = await transaction.get(participantRef);
         const at = serverTimestamp();
         const canRename = persistedParticipantId === targetId;
@@ -1162,7 +1400,7 @@ class FirebaseStore extends BaseStore {
             normalizedName,
             auditId: randomId(),
           };
-          const participantAuditRef = doc(db, "audit", participantAfter.auditId);
+          const participantAuditRef = this.d(db, "audit", participantAfter.auditId);
           transaction.set(participantRef, participantAfter);
           transaction.set(participantAuditRef, {
             action: "addParticipant",
@@ -1184,7 +1422,7 @@ class FirebaseStore extends BaseStore {
               normalizedName,
               auditId: randomId(),
             };
-            const participantAuditRef = doc(db, "audit", participantAfter.auditId);
+            const participantAuditRef = this.d(db, "audit", participantAfter.auditId);
             transaction.set(participantRef, participantAfter);
             transaction.set(participantAuditRef, {
               action: "renameParticipant",
@@ -1231,6 +1469,7 @@ class FirebaseStore extends BaseStore {
       this.emit();
     }
     try {
+      this.assertWritable();
       if (command.type === "identity") {
         const actor = this.requireReady().actor;
         const identity = {
@@ -1247,7 +1486,7 @@ class FirebaseStore extends BaseStore {
         );
         identity.name = saved.name;
         identity.participantId = saved.id;
-        rememberIdentity(identity);
+        rememberIdentity(this.cid, identity);
         this.snapshot = { ...this.snapshot, identity };
         this.emit();
         return;
@@ -1271,12 +1510,12 @@ class FirebaseStore extends BaseStore {
         if (event.kind === "count" && !Number.isInteger(command.value))
           throw new Error("Count results must be whole numbers.");
         const { db, actor } = this.requireReady();
-        const requestRef = doc(db, "attempts", command.requestId);
-        const auditRef = doc(db, "audit", randomId());
+        const requestRef = this.d(db, "attempts", command.requestId);
+        const auditRef = this.d(db, "audit", randomId());
         let linkedParticipantId: string | undefined;
         await retryOnRace(() => runTransaction(db, async (transaction) => {
           if ((await transaction.get(requestRef)).exists()) return;
-          const identityRef = doc(db, "identities", actor.uid);
+          const identityRef = this.d(db, "identities", actor.uid);
           const identitySnapshot = actor.participantId
             ? null
             : await transaction.get(identityRef);
@@ -1291,7 +1530,7 @@ class FirebaseStore extends BaseStore {
             (item) => item.normalizedName === normalizedName,
           );
           if (!participant) {
-            const participantRef = doc(db, "participants", deterministicId);
+            const participantRef = this.d(db, "participants", deterministicId);
             const existingParticipant = await transaction.get(participantRef);
             if (existingParticipant.exists())
               participant = fromFirestore(
@@ -1304,7 +1543,7 @@ class FirebaseStore extends BaseStore {
                 name: command.name.trim(),
                 normalizedName,
               };
-              const participantAuditRef = doc(db, "audit", randomId());
+              const participantAuditRef = this.d(db, "audit", randomId());
               const participantAfter = {
                 name: participant.name,
                 normalizedName: participant.normalizedName,
@@ -1354,7 +1593,7 @@ class FirebaseStore extends BaseStore {
             !actor.participantId &&
             normalizedName === normalizeName(actor.name)
           ) {
-            const identityAuditRef = doc(db, "audit", randomId());
+            const identityAuditRef = this.d(db, "audit", randomId());
             const identityAfter = {
               uid: actor.uid,
               name: actor.name,
@@ -1380,7 +1619,7 @@ class FirebaseStore extends BaseStore {
         }));
         if (linkedParticipantId) {
           const identity = { ...actor, participantId: linkedParticipantId };
-          rememberIdentity(identity);
+          rememberIdentity(this.cid, identity);
           this.snapshot = { ...this.snapshot, identity };
           this.emit();
         }
@@ -1414,8 +1653,8 @@ class FirebaseStore extends BaseStore {
           return;
         const id = await participantDocumentId(normalized);
         const { db, actor } = this.requireReady();
-        const participantRef = doc(db, "participants", id);
-        const auditRef = doc(db, "audit", randomId());
+        const participantRef = this.d(db, "participants", id);
+        const auditRef = this.d(db, "audit", randomId());
         // A phone returning from sleep can show a cached roster that is missing
         // someone another device just added. Rewriting that record would be an
         // update, which only administrators may make, so an existing record is
@@ -1519,14 +1758,14 @@ class FirebaseStore extends BaseStore {
         if (duplicate) throw new Error("A team with this name already exists.");
         const id = existing?.id || command.teamId || randomId();
         const { db, actor } = this.requireReady();
-        const teamRef = doc(db, "teams", id);
-        const eventRef = doc(db, "events", command.eventId);
-        const bracketRef = doc(db, "brackets", `${command.eventId}-bracket`);
+        const teamRef = this.d(db, "teams", id);
+        const eventRef = this.d(db, "events", command.eventId);
+        const bracketRef = this.d(db, "brackets", `${command.eventId}-bracket`);
         const participantRefs = memberIds.map((memberId) =>
-          doc(db, "participants", memberId),
+          this.d(db, "participants", memberId),
         );
-        const auditRef = doc(db, "audit", randomId());
-        const bracketAuditRef = doc(db, "audit", randomId());
+        const auditRef = this.d(db, "audit", randomId());
+        const bracketAuditRef = this.d(db, "audit", randomId());
         let committedTeam: Record<string, unknown> = {};
         let committedBracket: Record<string, unknown> | null = null;
         await runTransaction(db, async (transaction) => {
@@ -1598,11 +1837,11 @@ class FirebaseStore extends BaseStore {
       }
       if (command.type === "joinBracket") {
         const { db, actor } = this.requireReady();
-        const eventRef = doc(db, "events", command.eventId);
-        const entrantRef = doc(db, "participants", command.entrantId);
-        const teamRef = doc(db, "teams", command.entrantId);
-        const bracketRef = doc(db, "brackets", `${command.eventId}-bracket`);
-        const auditRef = doc(db, "audit", randomId());
+        const eventRef = this.d(db, "events", command.eventId);
+        const entrantRef = this.d(db, "participants", command.entrantId);
+        const teamRef = this.d(db, "teams", command.entrantId);
+        const bracketRef = this.d(db, "brackets", `${command.eventId}-bracket`);
+        const auditRef = this.d(db, "audit", randomId());
         let committed: Record<string, unknown> | null = null;
         await retryOnRace(() => runTransaction(db, async (transaction) => {
           committed = null;
@@ -1636,9 +1875,9 @@ class FirebaseStore extends BaseStore {
       }
       if (command.type === "startBracket") {
         const { db, actor } = this.requireAdmin();
-        const eventRef = doc(db, "events", command.eventId);
-        const bracketRef = doc(db, "brackets", `${command.eventId}-bracket`);
-        const auditRef = doc(db, "audit", randomId());
+        const eventRef = this.d(db, "events", command.eventId);
+        const bracketRef = this.d(db, "brackets", `${command.eventId}-bracket`);
+        const auditRef = this.d(db, "audit", randomId());
         await runTransaction(db, async (transaction) => {
           const eventSnapshot = await transaction.get(eventRef);
           const bracketSnapshot = await transaction.get(bracketRef);
@@ -1655,7 +1894,7 @@ class FirebaseStore extends BaseStore {
           if (registration && registration.status !== "registration") throw new Error("This event already has a bracket.");
           const pool = event.team ? "teams" : "participants";
           for (const entrantId of entrantIds) {
-            const entrant = await transaction.get(doc(db, pool, entrantId));
+            const entrant = await transaction.get(this.d(db, pool, entrantId));
             if (!entrant.exists() || (event.team && entrant.data().eventId !== command.eventId))
               throw new Error("Bracket entrants are invalid for this event.");
           }
@@ -1675,10 +1914,10 @@ class FirebaseStore extends BaseStore {
       }
       if (command.type === "joinGame") {
         const { db, actor } = this.requireReady();
-        const eventRef = doc(db, "events", command.eventId);
-        const participantRef = doc(db, "participants", command.participantId);
-        const gameRef = doc(db, "games", `${command.eventId}-game`);
-        const auditRef = doc(db, "audit", randomId());
+        const eventRef = this.d(db, "events", command.eventId);
+        const participantRef = this.d(db, "participants", command.participantId);
+        const gameRef = this.d(db, "games", `${command.eventId}-game`);
+        const auditRef = this.d(db, "audit", randomId());
         await retryOnRace(() => runTransaction(db, async (transaction) => {
           const eventSnapshot = await transaction.get(eventRef);
           const participantSnapshot = await transaction.get(participantRef);
@@ -1699,9 +1938,9 @@ class FirebaseStore extends BaseStore {
       }
       if (command.type === "startGame") {
         const { db, actor } = this.requireAdmin();
-        const eventRef = doc(db, "events", command.eventId);
-        const gameRef = doc(db, "games", `${command.eventId}-game`);
-        const auditRef = doc(db, "audit", randomId());
+        const eventRef = this.d(db, "events", command.eventId);
+        const gameRef = this.d(db, "games", `${command.eventId}-game`);
+        const auditRef = this.d(db, "audit", randomId());
         await runTransaction(db, async (transaction) => {
           const eventSnapshot = await transaction.get(eventRef);
           const gameSnapshot = await transaction.get(gameRef);
@@ -1719,9 +1958,9 @@ class FirebaseStore extends BaseStore {
       }
       if (command.type === "gameWinner") {
         const { db, actor } = this.requireReady();
-        const eventRef = doc(db, "events", command.eventId);
-        const gameRef = doc(db, "games", `${command.eventId}-game`);
-        const auditRef = doc(db, "audit", randomId());
+        const eventRef = this.d(db, "events", command.eventId);
+        const gameRef = this.d(db, "games", `${command.eventId}-game`);
+        const auditRef = this.d(db, "audit", randomId());
         await retryOnRace(() => runTransaction(db, async (transaction) => {
           const eventSnapshot = await transaction.get(eventRef);
           const gameSnapshot = await transaction.get(gameRef);
@@ -1740,17 +1979,17 @@ class FirebaseStore extends BaseStore {
       }
       if (command.type === "addBracketTeam" || command.type === "addBracketParticipant") {
         const { db, actor } = this.requireAdmin();
-        const target = doc(db, "brackets", command.bracketId);
-        const auditRef = doc(db, "audit", randomId());
+        const target = this.d(db, "brackets", command.bracketId);
+        const auditRef = this.d(db, "audit", randomId());
         await runTransaction(db, async (transaction) => {
           const existing = await transaction.get(target);
           const before = existing.exists() ? existing.data() : null;
           if (!before || before.revision !== command.revision)
             throw new Error("This bracket changed. Refresh and try again.");
           const bracket = fromFirestore(command.bracketId, before) as unknown as Bracket;
-          const event = await transaction.get(doc(db, "events", bracket.eventId));
+          const event = await transaction.get(this.d(db, "events", bracket.eventId));
           const entrantId = command.type === "addBracketTeam" ? command.teamId : command.participantId;
-          const entrant = await transaction.get(doc(
+          const entrant = await transaction.get(this.d(
             db,
             command.type === "addBracketTeam" ? "teams" : "participants",
             entrantId,
@@ -1862,6 +2101,10 @@ class FirebaseStore extends BaseStore {
         identity: { ...identity, email: linked.email || undefined },
       };
       this.emit();
+      // The linked Google email may hold an organizer or conference-admin role.
+      await getIdTokenResult(linked, true);
+      await this.watchRoles(linked, this.roles.claim, this.authRevision);
+      this.applyRoles();
       const name = identity.name || preferredName?.trim() || linked.displayName?.trim();
       if (!identity.name && name) {
         const normalized = normalizeName(name);
@@ -1891,6 +2134,8 @@ class FirebaseStore extends BaseStore {
     if (!this.auth) return;
     this.auditUnsubscribe?.();
     this.auditUnsubscribe = undefined;
+    this.roleUnsubscribers.forEach((unsubscribe) => unsubscribe());
+    this.roleUnsubscribers = [];
     this.snapshot = {
       ...this.snapshot,
       identity: null,
@@ -1900,8 +2145,14 @@ class FirebaseStore extends BaseStore {
     await signOut(this.auth);
   }
   dispose() {
+    this.disposed = true;
+    this.authRevision += 1;
     clearTimeout(this.authRetryTimer);
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
+    this.collectionUnsubscribers.forEach((unsubscribe) => unsubscribe());
+    this.collectionUnsubscribers.clear();
+    this.conferenceUnsubscribe?.();
+    this.roleUnsubscribers.forEach((unsubscribe) => unsubscribe());
     this.auditUnsubscribe?.();
     this.identityUnsubscribe?.();
     window.removeEventListener("online", this.online);
@@ -1979,14 +2230,19 @@ function friendlyFirebaseError(error: FirebaseError): string {
   return "The live conference service could not complete this action. Try again.";
 }
 
-export async function createConferenceStore(): Promise<ConferenceStore> {
+/**
+ * The store for one conference. Every Firestore path it reads or writes is
+ * under conferences/{conferenceId}; `?demo=1` gives a browser-local sample
+ * conference instead. Dispose it when the route's conference changes.
+ */
+export async function createConferenceStore(conferenceId: string): Promise<ConferenceStore> {
   if (
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("demo") === "1"
   ) {
     // Sample data is only needed for ?demo=1, so live visitors never download it.
     const { createSeedState } = await import("./seed");
-    return new DemoStore(createSeedState);
+    return new DemoStore(conferenceId, createSeedState);
   }
-  return new FirebaseStore();
+  return new FirebaseStore(conferenceId);
 }

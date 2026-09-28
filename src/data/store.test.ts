@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialEvents } from "@/domain/catalog";
 import { createSeedState, DEMO_RECORDED_AT } from "./seed";
-import { createConferenceStore, migrateLegacyDemoDates, validateTeamInput } from "./store";
+import { createConferenceStore, demoIdentityKey, demoStateKey, migrateLegacyDemoDates, validateTeamInput } from "./store";
+
+const CONFERENCE = "uncommon-men-2026";
 
 const legacyRecordedAt = 1_726_000_000_000;
 
@@ -103,8 +105,8 @@ describe("demo identity registration", () => {
   afterEach(() => vi.unstubAllGlobals());
   const setup = (identity?: { name: string; participantId?: string }) => {
     const data = createSeedState();
-    const storage = new Map<string, string>([["uncommon-men.demo-state.v1", JSON.stringify(data)]]);
-    if (identity) storage.set("uncommon-men.demo-identity", JSON.stringify(identity));
+    const storage = new Map<string, string>([[demoStateKey(CONFERENCE), JSON.stringify(data)]]);
+    if (identity) storage.set(demoIdentityKey(CONFERENCE), JSON.stringify(identity));
     vi.stubGlobal("window", { location: { search: "?demo=1" } });
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -115,7 +117,7 @@ describe("demo identity registration", () => {
 
   it.each([undefined, "demo-p1"] as const)("renames the linked record while retaining its results and teams (%s)", async (participantId) => {
     setup({ name: "Caleb Johnson", participantId: "demo-p1" });
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     const before = store.getSnapshot();
     const participantCount = before.data.participants.length;
     const attempts = before.data.attempts;
@@ -141,7 +143,7 @@ describe("demo identity registration", () => {
 
   it("links an explicitly selected different participant without renaming it", async () => {
     setup({ name: "Caleb Johnson", participantId: "demo-p1" });
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     const selected = store.getSnapshot().data.participants.find((participant) => participant.id === "demo-p2")!;
 
     await store.execute({ type: "identity", name: "Edited label", participantId: selected.id });
@@ -154,7 +156,7 @@ describe("demo identity registration", () => {
 
   it("creates and links a participant for first registration", async () => {
     setup();
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
 
     await store.execute({ type: "identity", name: "First Registration" });
 
@@ -166,5 +168,55 @@ describe("demo identity registration", () => {
       normalizedName: "first registration",
     });
     store.dispose();
+  });
+});
+
+describe("conference-scoped demo store", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const setup = (entries: [string, string][] = []) => {
+    const storage = new Map<string, string>(entries);
+    vi.stubGlobal("window", { location: { search: "?demo=1" } });
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    return storage;
+  };
+
+  it("presents a live sample conference with organizer-level demo access", async () => {
+    setup();
+    const store = await createConferenceStore("spring-retreat");
+    const snapshot = store.getSnapshot();
+    expect(snapshot.conferenceId).toBe("spring-retreat");
+    expect(snapshot.conferenceState).toBe("ready");
+    expect(snapshot.conference).toMatchObject({ id: "spring-retreat", slug: "spring-retreat", status: "live" });
+    expect(snapshot.identity).toMatchObject({ admin: true, organizer: true });
+    await store.signOutAdmin();
+    expect(store.getSnapshot().identity).toMatchObject({ admin: false, organizer: false });
+    store.dispose();
+  });
+
+  it("keeps each conference's browser-local data separate", async () => {
+    const storage = setup();
+    const first = await createConferenceStore("uncommon-men-2026");
+    await first.execute({ type: "identity", name: "Only Here" });
+    first.dispose();
+    expect(storage.has(demoStateKey("uncommon-men-2026"))).toBe(true);
+    expect(storage.has(demoIdentityKey("uncommon-men-2026"))).toBe(true);
+
+    const second = await createConferenceStore("spring-retreat");
+    expect(second.getSnapshot().identity?.name).toBe("");
+    expect(second.getSnapshot().data.participants.some((participant) => participant.name === "Only Here")).toBe(false);
+    second.dispose();
+  });
+
+  it("reads the pre-multi-conference demo keys for the default conference only", async () => {
+    setup([["uncommon-men.demo-identity", JSON.stringify({ name: "Legacy Visitor" })]]);
+    const legacy = await createConferenceStore("uncommon-men-2026");
+    expect(legacy.getSnapshot().identity?.name).toBe("Legacy Visitor");
+    legacy.dispose();
+    const other = await createConferenceStore("spring-retreat");
+    expect(other.getSnapshot().identity?.name).toBe("");
+    other.dispose();
   });
 });

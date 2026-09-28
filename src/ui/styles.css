@@ -194,8 +194,20 @@ nav a:hover,
 .notice.error {
   background: var(--color-danger-surface);
 }
-.notice.offline {
+.notice.offline,
+.notice.archived {
   background: var(--color-warning-surface);
+}
+/* Archived conferences are read-only: PageShell wraps the page in a disabled
+   fieldset so every form control is inert. */
+.archive-lock {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.conference-missing p {
+  max-width: 36rem;
 }
 .notice button {
   float: right;

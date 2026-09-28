@@ -6,10 +6,11 @@ import type { Competition, Match } from "@/domain/types";
 import { canAddBracketEntrants, createBracket } from "@/domain/ranking";
 import { ParticipantPicker } from "./ParticipantPicker";
 import { HowToPlay } from "./HowToPlay";
-import { Button, PageShell, useMediaQuery, withDemo } from "./shared";
+import { Button, PageShell, useMediaQuery, useConferenceLink } from "./shared";
 import "./BracketRoster.css";
 
 export function Bracket({ event }: { event: Competition }) {
+  const link = useConferenceLink();
   const { snapshot, execute } = useConference();
   const bracket = snapshot.data.brackets.find((b) => b.eventId === event.id);
   const [winner, setWinner] = useState("");
@@ -363,7 +364,7 @@ export function Bracket({ event }: { event: Competition }) {
     <PageShell>
       <section className="bracket-page">
         <header className="bracket-header">
-          <Link className="back" to={withDemo("/events")}>
+          <Link className="back" to={link("/events")}>
             <ArrowLeft /> Events
           </Link>
           <h1>{event.name}</h1>
@@ -387,7 +388,7 @@ export function Bracket({ event }: { event: Competition }) {
             <h2 id="bracket-signup-title">SIGN UP</h2>
             <p className="roster-note">Registration is open until an administrator starts the bracket.</p>
             {!snapshot.identity?.name.trim() ? (
-              <p><Link to={withDemo(`/welcome?next=${encodeURIComponent(`/events/${event.id}`)}`)}>Enter your name</Link> to sign up.</p>
+              <p><Link to={link(`/welcome?next=${encodeURIComponent(`/events/${event.id}`)}`)}>Enter your name</Link> to sign up.</p>
             ) : event.team ? (
               myTeams.length ? myTeams.map((team) => registeredEntrants.includes(team.id)
                 ? <p className="signup-done" key={team.id}><Check aria-hidden="true" /><span><strong>{team.name}</strong> is signed up.</span></p>
@@ -540,7 +541,7 @@ export function Bracket({ event }: { event: Competition }) {
                     ? `Add at least two ${event.team ? "teams" : "participants"}, then create the bracket.`
                     : event.team ? "An administrator must start this bracket after teams are registered." : "At least two players must sign up. An administrator starts the bracket."}
                 </p>
-                {event.team && !snapshot.identity?.admin && <p><Link to={withDemo("/admin")}>Administrator sign-in</Link></p>}
+                {event.team && !snapshot.identity?.admin && <p><Link to={link("/admin")}>Administrator sign-in</Link></p>}
                 {snapshot.identity?.admin && <Button type="button" className="primary" disabled={saving || registeredEntrants.length < 2} onClick={start}>Start bracket</Button>}
               </div>
             )}

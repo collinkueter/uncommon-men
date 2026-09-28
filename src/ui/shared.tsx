@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
+import { conferencePath, relativeConferencePath } from "@/lib/conferencePaths";
 import type { Competition } from "@/domain/types";
 import "./styles.css";
 import "./Profile.css";
@@ -19,6 +20,19 @@ export const demoQuery = () =>
   new URLSearchParams(window.location.search).get("demo") === "1";
 export const withDemo = (path: string) =>
   `${path}${demoQuery() ? (path.includes("?") ? "&" : "?") + "demo=1" : ""}`;
+/**
+ * Builds in-app links for the current conference: a conference-relative path
+ * such as `/events/push-up` becomes `/c/<slug>/events/push-up`, keeping ?demo=1.
+ * Every internal link and navigate() goes through this.
+ */
+export function useConferenceLink() {
+  const { conferenceId } = useConference();
+  return (path: string) => withDemo(conferencePath(conferenceId, path));
+}
+/** The current route relative to its conference, for ?next= return paths. */
+export function useConferenceRelativePath() {
+  return relativeConferencePath(useLocation().pathname);
+}
 export const scoreLabel = (event: Competition) => {
   if (event.kind === "bracket") return event.team ? "Team bracket" : "Bracket";
   if (event.kind === "knockout") return "Single-winner game";
@@ -52,10 +66,11 @@ export const ordinal = (n: number) => {
 };
 
 export function Brand({ compact = false }: { compact?: boolean }) {
+  const link = useConferenceLink();
   return (
     <Link
       className={`brand ${compact ? "compact" : ""}`}
-      to={withDemo("/events")}
+      to={link("/events")}
     >
       UNCOMMON <em>MEN</em>
       <i />
@@ -76,13 +91,19 @@ export function Button({
 export function PageShell({
   children,
   bare = false,
+  lockWhenArchived = true,
 }: {
   children: React.ReactNode;
   bare?: boolean;
+  /** Disable every form control while the conference is archived. */
+  lockWhenArchived?: boolean;
 }) {
   const { snapshot } = useConference();
   const [menu, setMenu] = useState(false);
   const location = useLocation();
+  const link = useConferenceLink();
+  const here = relativeConferencePath(location.pathname);
+  const archived = snapshot.conference?.status === "archived";
   useEffect(() => setMenu(false), [location.pathname]);
   return (
     <main className={bare ? "presentation-shell" : "app-shell"}>
@@ -102,32 +123,36 @@ export function PageShell({
             aria-label="Primary navigation"
             className={menu ? "open" : ""}
           >
-            <Link to={withDemo("/events")}>Events</Link>
-            <Link to={withDemo("/standings")}>Standings</Link>
-            <Link to={withDemo("/results")}>My results</Link>
+            <Link to={link("/events")}>Events</Link>
+            <Link to={link("/standings")}>Standings</Link>
+            <Link to={link("/results")}>My results</Link>
             {snapshot.identity?.admin && (
-              <Link to={withDemo("/admin")}>Admin</Link>
+              <Link to={link("/admin")}>Admin</Link>
             )}
           </nav>
           <div className="identity profile-identity">
             {snapshot.identity ? (
               <Link
                 className="profile-link"
-                to={withDemo(
-                  `/welcome?next=${encodeURIComponent(location.pathname)}`,
-                )}
+                to={link(`/welcome?next=${encodeURIComponent(here)}`)}
                 aria-label={`Change name for ${snapshot.identity.name}`}
               >
                 <CircleUserRound aria-hidden="true" />
                 <span className="profile-name">{snapshot.identity.name}</span>
               </Link>
             ) : (
-              <Link to={withDemo("/welcome")}>Get started</Link>
+              <Link to={link("/welcome")}>Get started</Link>
             )}
           </div>
       </header>
       <Status />
-      {children}
+      {archived && lockWhenArchived ? (
+        <fieldset className="archive-lock" disabled>
+          {children}
+        </fieldset>
+      ) : (
+        children
+      )}
       {!bare && <footer className="build-version">Version {__APP_COMMIT__}</footer>}
     </main>
   );
@@ -145,6 +170,12 @@ export function Status() {
     );
   if (snapshot.loading)
     return <div className="notice" role="status">Loading competition data…</div>;
+  if (snapshot.conference?.status === "archived")
+    return (
+      <div className="notice archived" role="status">
+        {snapshot.conference.name} is archived. Results are read-only.
+      </div>
+    );
   if (snapshot.mode === "demo")
     return (
       <div className="notice demo" role="status">DEMO MODE · Sample competition data</div>
@@ -159,7 +190,8 @@ export function Status() {
 }
 export function RequireIdentity({ children }: { children: React.ReactNode }) {
   const { snapshot } = useConference();
-  const location = useLocation();
+  const link = useConferenceLink();
+  const here = useConferenceRelativePath();
   if (snapshot.identityLoading)
     return (
       <PageShell>
@@ -170,24 +202,25 @@ export function RequireIdentity({ children }: { children: React.ReactNode }) {
     <>{children}</>
   ) : (
     <Navigate
-      to={withDemo(`/welcome?next=${encodeURIComponent(location.pathname)}`)}
+      to={link(`/welcome?next=${encodeURIComponent(here)}`)}
       replace
     />
   );
 }
 
 export function BottomNav() {
+  const link = useConferenceLink();
   return (
     <nav className="bottom-nav">
-      <NavLink to={withDemo("/events")}>
+      <NavLink to={link("/events")}>
         <CalendarDays />
         Events
       </NavLink>
-      <NavLink to={withDemo("/standings")}>
+      <NavLink to={link("/standings")}>
         <Trophy />
         Standings
       </NavLink>
-      <NavLink to={withDemo("/results")}>
+      <NavLink to={link("/results")}>
         <CircleUserRound />
         My results
       </NavLink>

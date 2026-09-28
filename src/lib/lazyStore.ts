@@ -10,8 +10,11 @@ export class LazyConferenceStore implements ConferenceStore {
   private pending: AppSnapshot;
   private ready: Promise<ConferenceStore>;
 
-  constructor(load: () => Promise<ConferenceStore>, demo: boolean) {
+  constructor(conferenceId: string, load: () => Promise<ConferenceStore>, demo: boolean) {
     this.pending = {
+      conferenceId,
+      conference: null,
+      conferenceState: "loading",
       data: { categories: [], events: [], participants: [], teams: [], attempts: [], brackets: [], games: [], audit: [] },
       identity: null,
       loading: true,

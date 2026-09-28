@@ -12,7 +12,7 @@ vi.mock("./shared", () => ({
   PageShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
   Button: (props: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
   Empty: ({ text }: { text: string }) => <p>{text}</p>,
-  withDemo: (path: string) => path,
+  useConferenceLink: () => (path: string) => `/c/test-conference${path}`,
 }));
 
 function renderGame() {
@@ -22,7 +22,7 @@ function renderGame() {
 
 beforeEach(() => {
   const data = createSeedState();
-  context.snapshot = { data, identity: { uid: "test", name: "Test", admin: false }, loading: false, identityLoading: false, error: null, mode: "demo", connected: true };
+  context.snapshot = { conferenceId: "test-conference", conference: null, conferenceState: "ready", data, identity: { uid: "test", name: "Test", admin: false }, loading: false, identityLoading: false, error: null, mode: "demo", connected: true };
   context.execute.mockReset();
 });
 

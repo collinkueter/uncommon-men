@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSeedState } from "./seed";
-import { createConferenceStore } from "./store";
+import { createConferenceStore, demoIdentityKey, demoStateKey } from "./store";
+
+const CONFERENCE = "uncommon-men-2026";
 
 const eventId = "carpet-ball";
 const teamEventId = "cornhole";
@@ -9,8 +11,8 @@ beforeEach(() => {
   const data = createSeedState();
   data.brackets = data.brackets.filter((bracket) => bracket.eventId !== eventId && bracket.eventId !== teamEventId);
   const storage = new Map([
-    ["uncommon-men.demo-state.v1", JSON.stringify(data)],
-    ["uncommon-men.demo-identity", JSON.stringify({ name: "Public player" })],
+    [demoStateKey(CONFERENCE), JSON.stringify(data)],
+    [demoIdentityKey(CONFERENCE), JSON.stringify({ name: "Public player" })],
   ]);
   vi.stubGlobal("window", { location: { search: "?demo=1" } });
   vi.stubGlobal("localStorage", {
@@ -23,7 +25,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("bracket registration", () => {
   it("creates a registration bracket and makes repeated joins idempotent", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     await store.signOutAdmin();
     const participant = store.getSnapshot().data.participants[0];
     const join = { type: "joinBracket" as const, eventId, entrantId: participant.id };
@@ -38,7 +40,7 @@ describe("bracket registration", () => {
   });
 
   it("starts from all registered entrants and rejects premature public starts", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     await store.signOutAdmin();
     const [first, second] = store.getSnapshot().data.participants;
     await store.execute({ type: "joinBracket", eventId, entrantId: first.id });
@@ -53,7 +55,7 @@ describe("bracket registration", () => {
   });
 
   it("auto-registers public team creation, then gates late teams", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     await store.signOutAdmin();
     const members = store.getSnapshot().data.participants.slice(0, 2).map((item) => item.id);
     await store.execute({ type: "saveTeam", eventId: teamEventId, name: "Public Team", memberIds: members });

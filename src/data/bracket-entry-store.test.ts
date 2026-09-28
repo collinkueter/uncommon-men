@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSeedState } from "./seed";
 import { createBracket } from "@/domain/ranking";
-import { createConferenceStore } from "./store";
+import { createConferenceStore, demoIdentityKey, demoStateKey } from "./store";
+
+const CONFERENCE = "uncommon-men-2026";
 
 beforeEach(() => {
   const data = createSeedState();
   const teams = data.teams.filter((team) => team.eventId === "cornhole");
   data.brackets = [createBracket("cornhole", teams.slice(0, 2).map((team) => team.id))];
   const storage = new Map([
-    ["uncommon-men.demo-state.v1", JSON.stringify(data)],
-    ["uncommon-men.demo-identity", JSON.stringify({ name: "Test admin" })],
+    [demoStateKey(CONFERENCE), JSON.stringify(data)],
+    [demoIdentityKey(CONFERENCE), JSON.stringify({ name: "Test admin" })],
   ]);
   vi.stubGlobal("window", { location: { search: "?demo=1" } });
   vi.stubGlobal("localStorage", {
@@ -21,7 +23,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("add team command", () => {
   it("adds and audits once, rejects stale retries, and locks after play", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     const original = store.getSnapshot().data.brackets[0];
     const teams = store.getSnapshot().data.teams.filter((team) => team.eventId === "cornhole");
     const command = { type: "addBracketTeam" as const, bracketId: original.id, teamId: teams[2].id, revision: original.revision };
@@ -38,7 +40,7 @@ describe("add team command", () => {
   });
 
   it("rejects nonadmins and teams from another event", async () => {
-    const store = await createConferenceStore();
+    const store = await createConferenceStore(CONFERENCE);
     const bracket = store.getSnapshot().data.brackets[0];
     const other = store.getSnapshot().data.teams.find((team) => team.eventId !== "cornhole")!;
     const command = { type: "addBracketTeam" as const, bracketId: bracket.id, teamId: other.id, revision: bracket.revision };
