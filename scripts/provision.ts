@@ -2,11 +2,19 @@ import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { initialCategories, initialEvents } from '../src/domain/catalog';
+import {
+  conferenceFieldsFromEnv, conferenceIdFromEnv, conferenceRef, ensureConference, ensurePlatformSettings,
+} from './lib/conference';
 
+// Idempotent setup of one conference: creates conferences/{CONFERENCE_ID} if
+// missing (CONFERENCE_NAME, CONFERENCE_START_DATE, CONFERENCE_END_DATE,
+// CONFERENCE_LOCATION, CONFERENCE_STATUS), settings/platform if missing, the
+// missing catalog records with audit entries, and the ADMIN_EMAIL organizer claim.
 async function main() {
 const projectId = process.env.FIREBASE_PROJECT_ID || 'uncommon-men';
 process.env.GOOGLE_CLOUD_QUOTA_PROJECT = projectId;
 const databaseId = process.env.FIREBASE_DATABASE_ID || 'conference';
+const conferenceId = conferenceIdFromEnv();
 const ownerEmail = process.env.ADMIN_EMAIL;
 if (!ownerEmail) throw new Error('Set ADMIN_EMAIL to the conference administrator email.');
 // Use the authenticated operator credential in memory. No service-account keys are created.
@@ -20,13 +28,19 @@ catch (error) {
 }
 await auth.setCustomUserClaims(owner.uid, { ...owner.customClaims, admin: true });
 const db = getFirestore(app, databaseId);
+const actor = { uid: owner.uid, name: 'Conference setup' };
+const conferenceCreated = await ensureConference(
+  db, conferenceId, conferenceFieldsFromEnv(conferenceId), actor, 'Conference provisioned',
+);
+const settingsCreated = await ensurePlatformSettings(db, conferenceId, actor, 'First provisioned conference is the default');
+const conference = conferenceRef(db, conferenceId);
 let created = 0;
 for (const [collectionName, records] of [['categories', initialCategories], ['events', initialEvents]] as const) {
   for (const record of records) {
-    const ref = db.collection(collectionName).doc(record.id);
+    const ref = conference.collection(collectionName).doc(record.id);
     await db.runTransaction(async transaction => {
       if ((await transaction.get(ref)).exists) return;
-      const auditRef = db.collection('audit').doc();
+      const auditRef = conference.collection('audit').doc();
       const { id: _id, ...fields } = record;
       const after = { ...fields, auditId: auditRef.id };
       transaction.create(ref, after);
@@ -39,7 +53,12 @@ for (const [collectionName, records] of [['categories', initialCategories], ['ev
     });
   }
 }
-process.stdout.write(`Provisioned ${projectId}/${databaseId}: ${created} catalog records added; administrator configured. No sample results added.\n`);
+process.stdout.write(
+  `Provisioned ${projectId}/${databaseId} conferences/${conferenceId}: `
+  + `${conferenceCreated ? 'conference created' : 'conference already existed'}; `
+  + `${settingsCreated ? `default conference set to ${conferenceId}` : 'default conference unchanged'}; `
+  + `${created} catalog records added; administrator configured. No sample results added.\n`,
+);
 
 }
 main().catch(error => { process.stderr.write(`Provisioning failed: ${error instanceof Error ? error.message : 'unknown error'}\n`); process.exitCode = 1; });

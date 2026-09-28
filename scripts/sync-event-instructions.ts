@@ -2,9 +2,12 @@ import { applicationDefault, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { initialEvents } from "../src/domain/catalog";
 import eventInstructions from "../src/domain/eventInstructions.json";
+import { conferenceIdFromEnv, conferenceRef } from "./lib/conference";
 
-const projectId = "uncommon-men";
-const databaseId = "conference";
+// Syncs the canonical HOW TO PLAY text into one conference (CONFERENCE_ID,
+// default uncommon-men-2026). Dry run unless --apply.
+const projectId = process.env.FIREBASE_PROJECT_ID || "uncommon-men";
+const databaseId = process.env.FIREBASE_DATABASE_ID || "conference";
 const apply = process.argv.includes("--apply");
 const actorUid = "system:event-instructions-sync";
 const actorName = "Event instructions sync";
@@ -22,10 +25,13 @@ async function main() {
   process.env.GOOGLE_CLOUD_QUOTA_PROJECT = projectId;
   const app = initializeApp({ projectId, credential: applicationDefault() });
   const db = getFirestore(app, databaseId);
+  const conferenceId = conferenceIdFromEnv();
+  const conference = conferenceRef(db, conferenceId);
+  process.stdout.write(`Conference: conferences/${conferenceId}\n`);
   const events = initialEvents.map((event) => ({ id: event.id, instructions: expectedInstructions(event.id) }));
   if (events.length !== 16) throw new Error(`Expected 16 canonical events, found ${events.length}`);
 
-  const refs = events.map(({ id }) => db.collection("events").doc(id));
+  const refs = events.map(({ id }) => conference.collection("events").doc(id));
   const snapshots = await Promise.all(refs.map((ref) => ref.get()));
   if (snapshots.some((snapshot) => !snapshot.exists)) {
     const missing = snapshots
@@ -49,14 +55,14 @@ async function main() {
   }
 
   for (const { id, instructions } of changes) {
-    const eventRef = db.collection("events").doc(id);
+    const eventRef = conference.collection("events").doc(id);
     await db.runTransaction(async (transaction) => {
       const currentSnapshot = await transaction.get(eventRef);
       if (!currentSnapshot.exists) throw new Error(`Event ${id} was removed during sync; no update was made`);
       const before = currentSnapshot.data() as RecordData;
       if (String(before.instructions ?? "") === instructions) return;
 
-      const auditRef = db.collection("audit").doc();
+      const auditRef = conference.collection("audit").doc();
       const after = { ...before, instructions, auditId: auditRef.id };
       transaction.update(eventRef, { instructions, auditId: auditRef.id });
       transaction.create(auditRef, {
