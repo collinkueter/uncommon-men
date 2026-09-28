@@ -260,3 +260,34 @@ describe("conference documents", () => {
     await assertSucceeds(participantWrite("recorder", B));
   });
 });
+
+describe("legacy top-level collections", () => {
+  const legacy = ["categories", "events", "participants", "teams", "attempts", "brackets", "games", "identities", "audit"];
+  beforeEach(async () => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await Promise.all(legacy.map((name) => setDoc(doc(db, name, "legacy-doc"), { name: "Legacy", auditId: "legacy" })));
+      await setDoc(doc(db, "identities", users.recorder.uid), { uid: users.recorder.uid, name: "R", participantId: null, auditId: "x" });
+    });
+  });
+
+  it("are neither readable nor writable by any client after the migration, whatever the role", async () => {
+    const clients = [environment.unauthenticatedContext().firestore(), ...(Object.keys(users) as User[]).map(dbFor)];
+    for (const db of clients)
+      for (const name of legacy) {
+        await assertFails(getDoc(doc(db, name, "legacy-doc")));
+        await assertFails(getDocs(collection(db, name)));
+        await assertFails(setDoc(doc(db, name, "new-doc"), { name: "New", auditId: "x" }));
+        await assertFails(deleteDoc(doc(db, name, "legacy-doc")));
+      }
+    await assertFails(getDoc(doc(dbFor("recorder"), "identities", users.recorder.uid)));
+  });
+
+  it("does not let a verified email grant itself a role or write its own role document", async () => {
+    const db = dbFor("adminA");
+    await assertFails(setDoc(doc(db, "platformRoles", "a-admin@example.com"), { role: "organizer", auditId: "self" }));
+    await assertFails(grantOrganizer("adminA", "a-admin@example.com"));
+    await assertFails(grantConferenceAdmin("adminA", B, "a-admin@example.com"));
+    await assertFails(setDoc(doc(dbFor("recorder"), "conferences", A, "admins", "recorder@example.com"), { email: "recorder@example.com", auditId: "self" }));
+  });
+});
