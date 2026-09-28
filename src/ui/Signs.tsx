@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import "@fontsource/barlow/latin-700.css";
-import { Printer, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Printer, ShieldCheck } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
 import { SIGN_ORIGIN, conferenceSignUrl, eventSignUrl, scoringSummary } from "@/domain/signs";
 import type { Competition } from "@/domain/types";
-import { Button, PageShell } from "./shared";
+import { Button, PageShell, useConferenceLink } from "./shared";
 import { SignQr } from "./SignQr";
 import "./Signs.css";
 
@@ -127,6 +127,7 @@ export function Signs({
   conferenceName?: string;
 }) {
   const { snapshot, signInAdmin } = useConference();
+  const link = useConferenceLink();
   const params = useParams<{ slug?: string }>();
   const conferenceSlug = conferenceSlugProp ?? params.slug ?? null;
   const conferenceName = conferenceNameProp ?? snapshot.conference?.name ?? "Uncommon Men";
@@ -191,6 +192,9 @@ export function Signs({
     <PageShell>
       <section className="signs-page">
         <div className="signs-controls">
+          <Link className="back" to={link("/admin")}>
+            <ArrowLeft /> Admin
+          </Link>
           <h1>EVENT SIGNS</h1>
           <p>
             Select the active events to print. Each sign is one letter-size page with a QR

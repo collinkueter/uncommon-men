@@ -1,16 +1,11 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { Link, Navigate, NavLink, useLocation } from "react-router-dom";
-import {
-  CalendarDays,
-  CircleUserRound,
-  Menu,
-  Trophy,
-  X,
-} from "lucide-react";
+import { useSyncExternalStore } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { Trophy, X } from "lucide-react";
 import { useConference } from "@/lib/ConferenceContext";
 import { conferencePath, relativeConferencePath } from "@/lib/conferencePaths";
 import type { Competition } from "@/domain/types";
-import { ConferenceSwitcher } from "./ConferenceSwitcher";
+import { SiteShell } from "./SiteShell";
+import { readLastConference } from "@/lib/lastConference";
 import "./styles.css";
 import "./Profile.css";
 import "./Platform.css";
@@ -67,18 +62,6 @@ export const ordinal = (n: number) => {
   return `${n}${suffix}`;
 };
 
-export function Brand({ compact = false }: { compact?: boolean }) {
-  const link = useConferenceLink();
-  return (
-    <Link
-      className={`brand ${compact ? "compact" : ""}`}
-      to={link("/events")}
-    >
-      UNCOMMON <em>MEN</em>
-      <i />
-    </Link>
-  );
-}
 export function Button({
   children,
   className = "",
@@ -92,74 +75,37 @@ export function Button({
 }
 export function PageShell({
   children,
-  bare = false,
   lockWhenArchived = true,
 }: {
   children: React.ReactNode;
-  bare?: boolean;
   /** Disable every form control while the conference is archived. */
   lockWhenArchived?: boolean;
 }) {
   const { snapshot } = useConference();
-  const [menu, setMenu] = useState(false);
-  const location = useLocation();
   const link = useConferenceLink();
-  const here = relativeConferencePath(location.pathname);
+  const here = useConferenceRelativePath();
   const archived = snapshot.conference?.status === "archived";
-  useEffect(() => setMenu(false), [location.pathname]);
+  const identity = snapshot.identity;
+  const remembered = readLastConference(snapshot.mode === "demo");
   return (
-    <main className={bare ? "presentation-shell" : "app-shell"}>
-      <header className={`topbar ${bare ? "presentation-topbar" : ""}`}>
-          <div className="brand-block">
-            <Brand />
-            {snapshot.conference && (
-              <ConferenceSwitcher
-                conferenceId={snapshot.conferenceId}
-                name={snapshot.conference.name}
-                organizer={Boolean(snapshot.identity?.organizer)}
-              />
-            )}
-          </div>
-          <button
-            className="mobile-menu"
-            onClick={() => setMenu(!menu)}
-            aria-label={menu ? "Close menu" : "Open menu"}
-            aria-expanded={menu}
-            aria-controls="primary-navigation"
-          >
-            {menu ? <X /> : <Menu />}
-          </button>
-          <nav
-            id="primary-navigation"
-            aria-label="Primary navigation"
-            className={menu ? "open" : ""}
-          >
-            <Link to={link("/events")}>Events</Link>
-            <Link to={link("/standings")}>Standings</Link>
-            <Link to={link("/results")}>My results</Link>
-            {snapshot.identity?.admin && (
-              <Link to={link("/admin")}>Admin</Link>
-            )}
-            {snapshot.identity?.organizer && (
-              <Link to={withDemo("/organizer")}>Organizer</Link>
-            )}
-          </nav>
-          <div className="identity profile-identity">
-            {snapshot.identity ? (
-              <Link
-                className="profile-link"
-                to={link(`/welcome?next=${encodeURIComponent(here)}`)}
-                aria-label={`Change name for ${snapshot.identity.name}`}
-              >
-                <CircleUserRound aria-hidden="true" />
-                <span className="profile-name">{snapshot.identity.name}</span>
-              </Link>
-            ) : (
-              <Link to={link("/welcome")}>Get started</Link>
-            )}
-          </div>
-      </header>
-      <Status />
+    <SiteShell
+      conference={{
+        id: snapshot.conferenceId,
+        // While the conference loads, the name remembered from the last visit.
+        name:
+          snapshot.conference?.name ??
+          (remembered?.id === snapshot.conferenceId ? remembered.name : ""),
+      }}
+      admin={identity?.admin}
+      organizer={identity?.organizer}
+      profile={
+        identity
+          ? { name: identity.name, to: link(`/welcome?next=${encodeURIComponent(here)}`) }
+          : undefined
+      }
+      getStarted={link("/welcome")}
+      notices={<Status />}
+    >
       {archived && lockWhenArchived ? (
         <fieldset className="archive-lock" disabled>
           {children}
@@ -167,8 +113,7 @@ export function PageShell({
       ) : (
         children
       )}
-      {!bare && <footer className="build-version">Version {__APP_COMMIT__}</footer>}
-    </main>
+    </SiteShell>
   );
 }
 export function Status() {
@@ -219,26 +164,6 @@ export function RequireIdentity({ children }: { children: React.ReactNode }) {
       to={link(`/welcome?next=${encodeURIComponent(here)}`)}
       replace
     />
-  );
-}
-
-export function BottomNav() {
-  const link = useConferenceLink();
-  return (
-    <nav className="bottom-nav">
-      <NavLink to={link("/events")}>
-        <CalendarDays />
-        Events
-      </NavLink>
-      <NavLink to={link("/standings")}>
-        <Trophy />
-        Standings
-      </NavLink>
-      <NavLink to={link("/results")}>
-        <CircleUserRound />
-        My results
-      </NavLink>
-    </nav>
   );
 }
 

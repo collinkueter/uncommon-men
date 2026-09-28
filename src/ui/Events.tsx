@@ -11,7 +11,7 @@ import { useConference } from "@/lib/ConferenceContext";
 import { formatScore, getBestAttempt, overallStandings } from "@/domain/ranking";
 import type { Competition } from "@/domain/types";
 import { myParticipantId } from "./AttemptList";
-import { BottomNav, Empty, PageShell, ordinal, useConferenceLink, scoreLabel } from "./shared";
+import { Empty, PageShell, ordinal, useConferenceLink, scoreLabel } from "./shared";
 import "./Events.css";
 
 const groups: Array<{ title: string; match: (event: Competition) => boolean; Icon: typeof Trophy }> = [
@@ -58,55 +58,58 @@ export function Events() {
             )}
           </div>
         )}
-        <h1>CHOOSE YOUR EVENT</h1>
-        <div className="filters">
-          <label>
-            <Search />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find an event"
-              aria-label="Find an event"
-            />
-          </label>
+        <div className="page-heading">
+          <h1>CHOOSE YOUR EVENT</h1>
+          <div className="filters">
+            <label>
+              <Search />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Find an event"
+                aria-label="Find an event"
+              />
+            </label>
+          </div>
         </div>
         {snapshot.loading ? (
           <div className="event-group skeleton" aria-busy="true" aria-label="Loading events">
             <span /><span /><span />
           </div>
         ) : events.length ? (
-          groups.map(({ title, match, Icon }) => {
-            const list = events.filter(match);
-            if (!list.length) return null;
-            return (
-              <section className="event-group" key={title} aria-labelledby={`group-${title}`}>
-                <h2 id={`group-${title}`}>{title}</h2>
-                <ul>
-                  {list.map((event) => {
-                    const mine = best(event);
-                    return (
-                      <li key={event.id}>
-                        <Link className="event-row" to={link(`/events/${event.id}`)}>
-                          <Icon className="event-icon" aria-hidden="true" />
-                          <span className="event-name">
-                            <strong>{event.name}</strong>
-                            <small>{scoreLabel(event)}</small>
-                          </span>
-                          {mine && <span className="event-best"><small>Your best</small>{mine}</span>}
-                          <ChevronRight className="event-chevron" aria-hidden="true" />
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            );
-          })
+          <div className="event-groups">
+            {groups.map(({ title, match, Icon }) => {
+              const list = events.filter(match);
+              if (!list.length) return null;
+              return (
+                <section className="event-group" key={title} aria-labelledby={`group-${title}`}>
+                  <h2 id={`group-${title}`}>{title}</h2>
+                  <ul>
+                    {list.map((event) => {
+                      const mine = best(event);
+                      return (
+                        <li key={event.id}>
+                          <Link className="event-row" to={link(`/events/${event.id}`)}>
+                            <Icon className="event-icon" aria-hidden="true" />
+                            <span className="event-name">
+                              <strong>{event.name}</strong>
+                              <small>{scoreLabel(event)}</small>
+                            </span>
+                            {mine && <span className="event-best"><small>Your best</small>{mine}</span>}
+                            <ChevronRight className="event-chevron" aria-hidden="true" />
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
         ) : (
           <Empty text="No events match that search." />
         )}
       </section>
-      <BottomNav />
     </PageShell>
   );
 }

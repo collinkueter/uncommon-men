@@ -1,13 +1,15 @@
 /* Screen controls */
 .signs-page {
-  padding: 1.5rem 1.25rem 3rem;
-  max-width: 640px;
+  width: 100%;
+  max-width: var(--page-max);
   margin: 0 auto;
+  padding: clamp(1.75rem, 3.5vw, 3rem) var(--gutter) 4rem;
 }
 .signs-controls h1 {
   margin: 0 0 0.5rem;
 }
 .signs-controls > p {
+  max-width: 62ch;
   color: var(--color-muted);
   margin: 0 0 1rem;
 }
@@ -18,11 +20,12 @@
   font-weight: 700 !important;
 }
 .signs-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   list-style: none;
   margin: 0 0 1rem;
   padding: 0;
-  max-height: 45vh;
-  overflow-y: auto;
+  overflow: hidden;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -31,8 +34,8 @@
   padding: 0 0.85rem;
   border-bottom: 1px solid var(--color-border-subtle);
 }
-.signs-list li:last-child {
-  border-bottom: none;
+.signs-list li {
+  margin-bottom: -1px;
 }
 .signs-poster-toggle {
   font-weight: 700 !important;

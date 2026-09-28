@@ -4,7 +4,7 @@ import { useConference } from "@/lib/ConferenceContext";
 import { formatScore, getBestAttempt, overallStandings } from "@/domain/ranking";
 import type { Attempt, ConferenceState } from "@/domain/types";
 import { AttemptList, myParticipantId } from "./AttemptList";
-import { BottomNav, PageShell, RequireIdentity, ordinal, useConferenceLink } from "./shared";
+import { PageShell, RequireIdentity, ordinal, useConferenceLink } from "./shared";
 import "./Results.css";
 
 export function isCountingAttempt(
@@ -36,8 +36,10 @@ export function Results() {
   return (
     <RequireIdentity>
       <PageShell>
-        <section className="content">
-          <h1>MY RESULTS</h1>
+        <section className="content results-page">
+          <div className="page-heading">
+            <h1>MY RESULTS</h1>
+          </div>
           {standing && standing.rank > 0 && (
             <Link className="results-summary" to={link("/standings")} aria-label={`${ordinal(standing.rank)} overall, ${Number(standing.points.toFixed(2))} points, ${standing.eventsPlayed} events. View standings`}>
               <span><strong>{ordinal(standing.rank)}</strong><small>Overall</small></span>
@@ -45,30 +47,33 @@ export function Results() {
               <span><strong>{standing.eventsPlayed}</strong><small>Events</small></span>
             </Link>
           )}
-          {bests.length > 0 && (
-            <section className="results-bests" aria-labelledby="results-bests-title">
-              <h2 id="results-bests-title">Your best</h2>
-              <ul>
-                {bests.map(({ event, attempt }) => (
-                  <li key={event.id}>
-                    <Link to={link(`/events/${event.id}`)}>
-                      <span>{event.name}</span>
-                      <strong>{formatScore(attempt.value, event)}{event.kind === "duration" ? "" : ` ${event.unit}`}</strong>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+          <div className="results-layout">
+            {bests.length > 0 && (
+              <section className="results-bests" aria-labelledby="results-bests-title">
+                <h2 id="results-bests-title">Your best</h2>
+                <ul>
+                  {bests.map(({ event, attempt }) => (
+                    <li key={event.id}>
+                      <Link to={link(`/events/${event.id}`)}>
+                        <span>{event.name}</span>
+                        <strong>{formatScore(attempt.value, event)}{event.kind === "duration" ? "" : ` ${event.unit}`}</strong>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            <section className="results-history" aria-labelledby="results-history-title">
+              <h2 id="results-history-title" className="results-history-title">Every attempt</h2>
+              <p className="results-history-note">Every attempt is shown. Your best valid result counts.</p>
+              <AttemptList
+                state={snapshot.data}
+                attempts={attempts}
+                emptyText="No attempts recorded yet. Choose an event to get started."
+              />
             </section>
-          )}
-          <h2 className="results-history-title">Every attempt</h2>
-          <p className="results-history-note">Every attempt is shown. Your best valid result counts.</p>
-          <AttemptList
-            state={snapshot.data}
-            attempts={attempts}
-            emptyText="No attempts recorded yet. Choose an event to get started."
-          />
+          </div>
         </section>
-        <BottomNav />
       </PageShell>
     </RequireIdentity>
   );

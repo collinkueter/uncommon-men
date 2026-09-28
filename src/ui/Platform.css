@@ -122,6 +122,7 @@
 }
 .conference-list {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
   gap: 0.75rem;
 }
 .conference-card {
@@ -404,21 +405,21 @@
 .event-picker {
   margin-top: 1rem;
 }
-.event-group {
+.event-picker .event-group {
   margin: 0.75rem 0;
   padding: 0.4rem 1rem 0.6rem;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
-.event-group legend {
+.event-picker .event-group legend {
   padding: 0 0.4rem;
   font: 800 1rem var(--font-display);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--color-accent);
 }
-.event-group .check {
+.event-picker .event-group .check {
   display: flex !important;
 }
 .created-panel code,

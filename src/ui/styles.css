@@ -119,72 +119,6 @@ body:after {
   background-size: 630px;
   pointer-events: none;
 }
-.app-shell,
-.presentation-shell {
-  min-height: 100dvh;
-  background: linear-gradient(105deg, var(--color-shell), var(--color-shell));
-  max-width: 1560px;
-  margin: auto;
-}
-.topbar {
-  height: 92px;
-  display: flex;
-  align-items: center;
-  padding: 0 3rem;
-  gap: 4rem;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: linear-gradient(90deg, var(--color-chrome-start), var(--color-chrome-end));
-  background-image:
-    url("/brand/camo.svg"), linear-gradient(90deg, var(--color-chrome-start), var(--color-chrome-end));
-  background-size: 420px, auto;
-}
-.brand {
-  font: 900 clamp(1.8rem, 3vw, 3.1rem) / 0.8 var(--font-display);
-  letter-spacing: -0.05em;
-  text-decoration: none;
-  color: var(--color-text);
-  display: inline-block;
-  white-space: nowrap;
-  transform: skew(-5deg);
-}
-.brand em {
-  font-style: normal;
-  color: var(--color-accent);
-}
-.brand i {
-  display: block;
-  width: 75%;
-  height: 4px;
-  background: var(--color-accent);
-  margin: 6px 8%;
-  clip-path: polygon(0 40%, 70% 0, 55% 75%, 100% 60%, 35% 100%);
-}
-nav {
-  display: flex;
-  gap: 3rem;
-  align-items: center;
-}
-nav a {
-  color: var(--color-text);
-  font-size: 1.1rem;
-  text-decoration: none;
-}
-nav a:hover,
-.underline {
-  color: var(--color-accent);
-}
-.identity {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-.identity a {
-  color: var(--color-text);
-}
-.mobile-menu {
-  display: none;
-}
 .notice {
   padding: 0.65rem 1rem;
   text-align: center;
@@ -219,11 +153,6 @@ nav a:hover,
 }
 .notice.error { display: flex; align-items: center; justify-content: center; gap: 1rem; }
 .notice.error button { flex-shrink: 0; }
-.content {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 3.5rem 2rem 6rem;
-}
 .content h1,
 .bracket-page h1,
 .admin h1,
@@ -282,9 +211,6 @@ button:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
-}
-.bottom-nav {
-  display: none;
 }
 .welcome {
   max-width: 490px;
@@ -523,6 +449,7 @@ a:focus-visible {
   color: var(--color-accent);
 }
 .underline {
+  color: var(--color-accent);
   display: block;
   text-align: center;
   font-weight: 700;
@@ -534,7 +461,7 @@ a:focus-visible {
 .bracket-page {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(340px, 1fr);
-  min-height: calc(100dvh - 92px);
+  min-height: calc(100dvh - var(--header-height));
 }
 .bracket-page > div {
   padding: 3rem;
@@ -728,56 +655,79 @@ a:focus-visible {
 .admin-login small {
   color: var(--color-muted);
 }
+/* Admin and organizer: a sticky section list beside the working area, both
+   inside the page container like every other page. */
 .admin {
   display: grid;
-  grid-template-columns: 235px 1fr;
-  min-height: calc(100dvh - 92px);
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
 }
 .admin > aside {
-  padding: 2rem 0;
-  background: var(--color-chrome-end);
+  position: sticky;
+  top: var(--header-height);
+  align-self: start;
+  display: grid;
+  gap: 0.2rem;
+  padding: 2rem 1.25rem 2rem 0;
   border-right: 1px solid var(--color-border-subtle);
 }
 .admin > aside h2 {
-  padding: 0 1.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0 0.85rem;
+  font-size: 1.6rem !important;
+  color: var(--color-muted);
 }
-.admin > aside button {
+.admin > aside button,
+.admin > aside a.button {
   display: flex;
   width: 100%;
+  min-height: 44px;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
   text-align: left;
-  padding: 1rem 1.5rem;
+  padding: 0.6rem 0.85rem;
   border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-muted);
-  font: 500 1.1rem var(--font-body);
+  font: 500 1.05rem var(--font-body);
+  letter-spacing: 0;
   text-transform: capitalize;
+  text-decoration: none;
+}
+.admin > aside button:hover,
+.admin > aside a.button:hover {
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  transform: none;
+}
+.admin > aside button svg,
+.admin > aside a.button svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
 }
 .admin > aside button.active {
   color: var(--color-accent);
   background: var(--color-accent-surface);
 }
-.admin > aside > button:last-child {
-  margin-top: 2rem;
-  color: var(--color-text);
-}
-.admin > aside a.button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 1rem;
+.admin > aside a.button:first-of-type {
   margin-top: 1rem;
-  padding: 1rem 1.5rem;
-  border: 0;
-  background: transparent;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+.admin > aside > button:last-child {
+  margin-top: 1rem;
   color: var(--color-text);
-  font: 500 1.1rem var(--font-body);
-  text-decoration: none;
 }
 .admin-main {
-  padding: 3rem;
-  max-width: 1000px;
+  min-width: 0;
+  padding: 2.5rem 0 4rem;
 }
 .admin-grid {
   display: grid;
@@ -831,87 +781,12 @@ a:focus-visible {
   body:after {
     opacity: 0.18;
   }
-  .app-shell {
-    min-height: 100dvh;
-  }
-  .topbar {
-    height: 68px;
-    padding: 0 1rem;
-    background-size: 300px, auto;
-  }
-  .topbar .brand {
-    font-size: 1.9rem;
-    font-weight: 800;
-    letter-spacing: -0.025em;
-  }
-  .topbar nav,
-  .identity {
-    display: none;
-  }
-  .topbar nav.open {
-    display: flex;
-    position: absolute;
-    top: 68px;
-    left: 0;
-    right: 0;
-    z-index: var(--z-menu);
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-    background: var(--color-surface-translucent);
-    border-bottom: 1px solid var(--color-border);
-  }
-  .topbar nav.open a {
-    padding: 1rem 1.4rem;
-    border-bottom: 1px solid var(--color-border-subtle);
-  }
-  .mobile-menu {
-    display: block;
-    margin-left: auto;
-    border: 0;
-    background: transparent;
-    color: var(--color-text);
-    min-width: 44px;
-    min-height: 44px;
-  }
-  .content {
-    padding: 2rem 1.15rem 6.3rem;
-  }
   .content h1,
   .welcome h1 {
     font-size: 3.3rem;
   }
   .filters {
     grid-template-columns: 1fr;
-  }
-  .bottom-nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: var(--z-nav);
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    padding: 0.4rem;
-    background: var(--color-surface-translucent);
-    border-top: 1px solid var(--color-border-subtle);
-    gap: 0;
-  }
-  .bottom-nav a {
-    display: grid;
-    justify-items: center;
-    gap: 0.15rem;
-    color: var(--color-muted);
-    text-decoration: none;
-    font-size: 0.72rem;
-    min-height: 44px;
-    align-content: center;
-  }
-  .bottom-nav svg {
-    width: 22px;
-  }
-  .bottom-nav a.active {
-    color: var(--color-accent);
   }
   .welcome {
     padding: 3rem 1.3rem;
@@ -939,35 +814,40 @@ a:focus-visible {
   }
   .admin {
     display: block;
+    padding: 0;
   }
   .admin > aside {
-    display: grid;
+    position: static;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.25rem;
     padding: 0.5rem;
+    border-right: 0;
     border-bottom: 1px solid var(--color-border-subtle);
   }
   .admin > aside h2 {
     display: none;
   }
-  .admin > aside > button:last-child { margin-top: 0; }
+  .admin > aside > button:last-child,
+  .admin > aside a.button:first-of-type {
+    margin-top: 0;
+    padding-top: 0.65rem;
+    border-top: 0;
+    border-radius: var(--radius-md);
+  }
   .admin > aside button,
   .admin > aside a.button {
-    width: 100%;
-    min-height: 44px;
     justify-content: center;
     text-align: center;
     white-space: nowrap;
     padding: 0.65rem 0.3rem;
     font-size: 0.9rem;
-    margin-top: 0;
   }
   .admin > aside button svg,
   .admin > aside a.button svg {
     display: none;
   }
   .admin-main {
-    padding: 2rem 1.15rem;
+    padding: 1.75rem var(--gutter) 3rem;
   }
   .admin-grid {
     grid-template-columns: 1fr;
@@ -989,13 +869,6 @@ a:focus-visible {
   }
 }
 @media (min-width: 761px) and (max-width: 1100px) {
-  .topbar {
-    padding: 0 1.5rem;
-    gap: 2rem;
-  }
-  .topbar nav {
-    gap: 1.25rem;
-  }
   .bracket-page {
     grid-template-columns: 1.5fr 1fr;
   }
@@ -1017,40 +890,9 @@ a:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
 }
-.topbar nav a { display: inline-flex; align-items: center; min-height: 44px; }
 .scoring h1 { text-transform: uppercase; font-weight: 700; }
 .timer output { font-weight: 700; }
 
-.presentation-topbar {
-  height: 64px;
-  padding: 0 1.5rem;
-  gap: 2rem;
-}
-.presentation-topbar .brand {
-  font-size: 2.15rem;
-}
-.presentation-topbar nav {
-  gap: 1.4rem;
-}
-.presentation-topbar nav a {
-  font-size: 0.95rem;
-}
-.presentation-topbar .identity {
-  font-size: 0.9rem;
-}
-
-@media (max-width: 760px) {
-  .presentation-topbar {
-    height: 56px;
-    padding: 0 0.7rem;
-  }
-  .presentation-topbar .brand {
-    font-size: 1.7rem;
-  }
-  .presentation-topbar nav.open {
-    top: 56px;
-  }
-}
 .winner-panel input {
   margin-top: 1rem;
 }
@@ -1060,14 +902,4 @@ a:focus-visible {
 .route-pending {
   min-height: 60dvh;
 }
-.build-version {
-  padding: 2rem 1rem 1rem;
-  color: var(--color-muted);
-  font-size: 0.72rem;
-  text-align: center;
-  opacity: 0.6;
-  user-select: all;
-}
-@media (max-width: 760px) {
-  .app-shell:has(.bottom-nav) .build-version { padding-bottom: 5.5rem; }
-}
+

@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { ConferenceProvider, useConference } from "@/lib/ConferenceContext";
 import { legacyRedirectPath } from "@/lib/conferencePaths";
 import { loadDefaultConferenceId, peekDefaultConferenceId } from "@/lib/defaultConference";
+import { rememberConference } from "@/lib/lastConference";
 import { Button, PageShell, useConferenceLink } from "./shared";
 import { Welcome } from "./Welcome";
 import { Events } from "./Events";
@@ -66,6 +67,10 @@ export function ConferenceNotFound() {
 export function ConferenceRoutes() {
   const { snapshot } = useConference();
   const link = useConferenceLink();
+  const name = snapshot.conference?.name;
+  useEffect(() => {
+    if (name) rememberConference(snapshot.mode === "demo", { id: snapshot.conferenceId, name });
+  }, [snapshot.mode, snapshot.conferenceId, name]);
   if (snapshot.conferenceState === "missing") return <ConferenceNotFound />;
   return (
     <Routes>

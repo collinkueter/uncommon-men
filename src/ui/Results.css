@@ -170,3 +170,17 @@
   margin: 0;
   color: var(--color-muted);
 }
+
+/* Bests beside the attempt history when the screen is wide enough. */
+.results-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 0 clamp(1.5rem, 3vw, 3rem);
+  align-items: start;
+}
+.results-layout .results-bests ul {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+.results-history .attempt-list {
+  margin-top: 1rem;
+}

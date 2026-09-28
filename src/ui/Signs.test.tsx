@@ -14,6 +14,7 @@ vi.mock("@/lib/ConferenceContext", () => ({ useConference: () => context }));
 vi.mock("./shared", () => ({
   PageShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
   Button: (props: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
+  useConferenceLink: () => (path: string) => `/c/test${path}`,
 }));
 vi.mock("./SignQr", () => ({
   SignQr: ({ url, label }: { url: string; label: string }) => (

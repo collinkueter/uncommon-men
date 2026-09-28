@@ -581,22 +581,24 @@ export function Organizer() {
     void store.signIn().catch((error: unknown) => setSignInError(error instanceof Error ? error.message : String(error)));
   };
   const signOut = () => void store.signOut();
-  useEffect(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" }), [tab]);
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [tab]);
   if (snapshot.identityLoading)
     return (
-      <PlatformShell>
+      <PlatformShell useDefault>
         <div className="route-pending" aria-busy="true" />
       </PlatformShell>
     );
   if (!snapshot.identity?.organizer)
     return (
-      <PlatformShell>
+      <PlatformShell useDefault>
         <OrganizerLogin snapshot={snapshot} signIn={signIn} signOut={signOut} />
         {signInError && <p className="form-message centered">{signInError}</p>}
       </PlatformShell>
     );
   return (
-    <PlatformShell>
+    <PlatformShell useDefault>
       <section className="admin organizer">
         <aside>
           <h2>ORGANIZER</h2>

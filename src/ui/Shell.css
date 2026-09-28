@@ -1,0 +1,344 @@
+/* Site shell: the one header, page container and bottom bar every screen
+   shares. Page layouts size themselves inside --page-max with --gutter. */
+:root {
+  --page-max: 1440px;
+  --gutter: clamp(1rem, 3.5vw, 3rem);
+  --header-height: 80px;
+  --bottom-nav-height: 64px;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--color-shell);
+}
+.page-main {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Header: full-bleed band, contents aligned to the page container. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-menu);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background-color: var(--color-chrome-end);
+  background-image:
+    url("/brand/camo.svg"), linear-gradient(90deg, var(--color-chrome-start), var(--color-chrome-end));
+  background-size: 420px, auto;
+}
+.topbar-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: clamp(1.5rem, 3vw, 3.5rem);
+  max-width: var(--page-max);
+  height: var(--header-height);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+.brand {
+  font: 900 clamp(1.9rem, 2.4vw, 2.6rem) / 0.8 var(--font-display);
+  letter-spacing: -0.05em;
+  text-decoration: none;
+  color: var(--color-text);
+  display: inline-block;
+  white-space: nowrap;
+  transform: skew(-5deg);
+}
+.brand em {
+  font-style: normal;
+  color: var(--color-accent);
+}
+.brand i {
+  display: block;
+  width: 75%;
+  height: 4px;
+  background: var(--color-accent);
+  margin: 6px 8%;
+  clip-path: polygon(0 40%, 70% 0, 55% 75%, 100% 60%, 35% 100%);
+}
+.conference-pick {
+  min-height: 28px;
+  align-content: center;
+  color: var(--color-muted);
+  font: 700 0.8rem / 1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.conference-pick:hover {
+  color: var(--color-accent);
+}
+
+/* Primary navigation: the current section carries an accent underline. */
+.topbar nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(1rem, 2vw, 2.25rem);
+  align-self: stretch;
+}
+.topbar nav a {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  height: 100%;
+  color: var(--color-text);
+  font-size: 1.05rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.topbar nav a:hover {
+  color: var(--color-accent);
+}
+.topbar nav a.active {
+  color: var(--color-accent);
+}
+.topbar nav a.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--color-accent);
+}
+.nav-staff {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: inherit;
+  padding-left: clamp(1rem, 2vw, 2.25rem);
+  border-left: 1px solid var(--color-border-subtle);
+}
+.nav-staff a {
+  color: var(--color-muted) !important;
+}
+.nav-staff a:hover,
+.nav-staff a.active {
+  color: var(--color-accent) !important;
+}
+.identity {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.identity a {
+  color: var(--color-text);
+}
+.mobile-menu {
+  display: none;
+}
+
+/* Page container: every page's content column starts at the brand's edge. */
+.content,
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: clamp(1.75rem, 3.5vw, 3rem) var(--gutter) 4rem;
+}
+/* Single-task forms keep a readable measure, aligned to the page edge. */
+.content.scoring,
+.content.knockout-page,
+.content.conference-missing {
+  --measure: 760px;
+}
+.content.scoring > *,
+.content.knockout-page > *,
+.content.conference-missing > * {
+  max-width: var(--measure);
+}
+
+.build-version {
+  padding: 2rem 1rem 1rem;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  text-align: center;
+  opacity: 0.6;
+  user-select: all;
+}
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 1100px) and (min-width: 761px) {
+  .topbar nav a {
+    font-size: 0.98rem;
+  }
+  .profile-identity {
+    max-width: 14rem;
+  }
+}
+
+@media (max-width: 760px) {
+  :root {
+    --header-height: 64px;
+  }
+  .topbar {
+    background-size: 300px, auto;
+  }
+  .topbar-inner {
+    gap: 0.35rem;
+  }
+  .topbar .brand {
+    font-size: 1.9rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+  .topbar nav {
+    display: none;
+  }
+  .topbar nav.open {
+    display: flex;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--shadow-md);
+  }
+  .topbar nav.open a {
+    height: auto;
+    padding: 1rem var(--gutter);
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+  .topbar nav.open a.active::after {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: auto;
+    width: 3px;
+    height: auto;
+    border-radius: 0 3px 3px 0;
+  }
+  .nav-staff {
+    flex-direction: column;
+    align-items: stretch;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .mobile-menu {
+    display: block;
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .content,
+  .page {
+    padding-top: 1.75rem;
+  }
+  .app-shell:has(.bottom-nav) {
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-nav);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    min-height: var(--bottom-nav-height);
+    padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom));
+    background: var(--color-surface-translucent);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  .bottom-nav a {
+    display: grid;
+    justify-items: center;
+    gap: 0.15rem;
+    color: var(--color-muted);
+    text-decoration: none;
+    font-size: 0.72rem;
+    min-height: 44px;
+    align-content: center;
+  }
+  .bottom-nav svg {
+    width: 22px;
+  }
+  .bottom-nav a.active {
+    color: var(--color-accent);
+  }
+}
+
+/* Full-screen standings on a projector: the page alone, no chrome. */
+:root:fullscreen .topbar,
+:root:fullscreen .notice,
+:root:fullscreen .build-version,
+:root:fullscreen .bottom-nav {
+  display: none;
+}
+html {
+  scroll-padding-top: calc(var(--header-height) + 1rem);
+}
+
+/* Page heading row: title on the left, page tools (search, filters) on the
+   right when there is room, stacked on phones. */
+.page-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+}
+.page-heading h1 {
+  margin-bottom: 0 !important;
+}
+.page-heading > .filters {
+  flex: 0 1 440px;
+  margin: 0;
+}
+.page-heading + * {
+  margin-top: 1.75rem;
+}
+
+@media print {
+  .app-shell > .topbar,
+  .app-shell > .notice,
+  .app-shell > .build-version,
+  .app-shell > .bottom-nav {
+    display: none !important;
+  }
+}
+
+/* Scoring on a wide screen: the attempt history opens beside the form
+   instead of below it. */
+@media (min-width: 1100px) {
+  .content.scoring:has(> .inline-attempt-history) {
+    display: grid;
+    grid-template-columns: minmax(0, var(--measure)) minmax(320px, 1fr);
+    column-gap: clamp(2rem, 4vw, 4rem);
+    align-content: start;
+  }
+  .content.scoring > * {
+    grid-column: 1;
+  }
+  .content.scoring > .inline-attempt-history {
+    grid-column: 2;
+    grid-row: 1 / span 40;
+    align-self: start;
+    position: sticky;
+    top: calc(var(--header-height) + 1.5rem);
+    max-width: none;
+    margin-top: 0;
+    padding: 1.25rem;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-translucent);
+  }
+}

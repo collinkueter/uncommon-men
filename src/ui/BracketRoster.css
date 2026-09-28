@@ -82,8 +82,8 @@
 .bracket-start .button { margin-top: 0.5rem; }
 
 /* Keep bracket styles scoped above the legacy page selectors. */
-.bracket-page.bracket-page { display: block; min-height: calc(100dvh - 92px); padding: clamp(1rem, 3vw, 3rem); }
-.bracket-page > .bracket-play { padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 2rem; align-items: start; }
+.bracket-page.bracket-page { display: block; width: 100%; max-width: var(--page-max); margin: 0 auto; padding: clamp(1.75rem, 3.5vw, 3rem) var(--gutter) 4rem; }
+.bracket-page > .bracket-play { padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 380px); gap: 2rem; align-items: start; }
 .bracket-page > .bracket-play.registration { grid-template-columns: minmax(0, 1fr); }
 .bracket-page .bracket-header { margin-bottom: 1.75rem; }
 .bracket-page .bracket-header h1 { margin: .75rem 0 1rem; overflow-wrap: anywhere; }
@@ -123,7 +123,7 @@
 .bracket-page .match svg { width: 18px; height: 18px; flex-shrink: 0; }
 .bracket-page .match-waiting { border-style: dashed; }
 .bracket-page .match-waiting div:not(.winner) { color: var(--color-muted); }
-.bracket-page .winner-panel { position: sticky; top: 1rem; border: 1px solid var(--color-border); padding: 1.25rem; background: var(--color-surface); border-radius: var(--radius-md); scroll-margin-top: 1rem; min-width: 0; }
+.bracket-page .winner-panel { position: sticky; top: calc(var(--header-height) + 1rem); border: 1px solid var(--color-border); padding: 1.25rem; background: var(--color-surface); border-radius: var(--radius-md); scroll-margin-top: calc(var(--header-height) + 1rem); min-width: 0; }
 .bracket-page .winner-panel h2 { font-size: 1.85rem; line-height: 1; margin: 0 0 1rem; }
 .bracket-page .winner-panel:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 4px; }
 .bracket-page .editor-context { color: var(--color-muted); font-size: .9rem; margin: 0 0 1.25rem; }

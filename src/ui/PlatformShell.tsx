@@ -1,51 +1,53 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import type { ReactNode } from "react";
+import { X } from "lucide-react";
 import { usePlatform } from "@/lib/PlatformContext";
-import { withDemo } from "./shared";
-import "./Platform.css";
+import { readLastConference } from "@/lib/lastConference";
+import type { PlatformSnapshot } from "@/domain/types";
+import { SiteShell, type ShellConference } from "./SiteShell";
+
+/**
+ * The conference the header points into outside any conference: the one this
+ * browser last opened, else (when `useDefault`) the platform default. A
+ * remembered conference that is no longer listed is dropped.
+ */
+function navConference(snapshot: PlatformSnapshot, useDefault: boolean): ShellConference | undefined {
+  const listed = (id: string) => snapshot.conferences.find((conference) => conference.id === id);
+  const remembered = readLastConference(snapshot.mode === "demo");
+  if (remembered) {
+    const current = listed(remembered.id);
+    if (current) return { id: current.id, name: current.name };
+    if (snapshot.conferencesLoading) return remembered;
+  }
+  const fallback = useDefault && snapshot.defaultConferenceId ? listed(snapshot.defaultConferenceId) : undefined;
+  return fallback && { id: fallback.id, name: fallback.name };
+}
 
 /** Page chrome outside any conference: the directory and the organizer area. */
-export function PlatformShell({ children }: { children: ReactNode }) {
+export function PlatformShell({ children, useDefault = false }: { children: ReactNode; useDefault?: boolean }) {
   const { snapshot, store } = usePlatform();
-  const [menu, setMenu] = useState(false);
-  const location = useLocation();
-  useEffect(() => setMenu(false), [location.pathname]);
+  const identity = snapshot.identity;
+  // Anonymous sessions (every competitor) have no account name to show.
+  const name = identity?.email ? identity.name : undefined;
+  const notices = snapshot.error ? (
+    <div className="notice error" role="alert">
+      {snapshot.error}
+      <button onClick={() => store.clearError()} aria-label="Dismiss notification">
+        <X />
+      </button>
+    </div>
+  ) : (
+    snapshot.mode === "demo" && (
+      <div className="notice demo" role="status">DEMO MODE · Sample conferences stored in this browser</div>
+    )
+  );
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <Link className="brand" to={withDemo("/")}>
-          UNCOMMON <em>MEN</em>
-          <i />
-        </Link>
-        <button
-          className="mobile-menu"
-          onClick={() => setMenu(!menu)}
-          aria-label={menu ? "Close menu" : "Open menu"}
-          aria-expanded={menu}
-          aria-controls="platform-navigation"
-        >
-          {menu ? <X /> : <Menu />}
-        </button>
-        <nav id="platform-navigation" aria-label="Primary navigation" className={menu ? "open" : ""}>
-          <Link to={withDemo("/")}>Conferences</Link>
-          {snapshot.identity?.organizer && <Link to={withDemo("/organizer")}>Organizer</Link>}
-        </nav>
-      </header>
-      {snapshot.error ? (
-        <div className="notice error" role="alert">
-          {snapshot.error}
-          <button onClick={() => store.clearError()} aria-label="Dismiss notification">
-            <X />
-          </button>
-        </div>
-      ) : (
-        snapshot.mode === "demo" && (
-          <div className="notice demo" role="status">DEMO MODE · Sample conferences stored in this browser</div>
-        )
-      )}
+    <SiteShell
+      conference={navConference(snapshot, useDefault)}
+      organizer={identity?.organizer}
+      profile={name ? { name } : undefined}
+      notices={notices}
+    >
       {children}
-      <footer className="build-version">Version {__APP_COMMIT__}</footer>
-    </main>
+    </SiteShell>
   );
 }

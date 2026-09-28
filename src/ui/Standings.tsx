@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Crown, Expand } from "lu
 import { useConference } from "@/lib/ConferenceContext";
 import { eventStandings, formatScore, overallStandings } from "@/domain/ranking";
 import type { Competition, Standing } from "@/domain/types";
-import { BottomNav, Button, Empty, PageShell, scoreLabel } from "./shared";
+import { Button, Empty, PageShell, scoreLabel } from "./shared";
 import { ThemedSelect } from "./ThemedSelect";
 import "./Standings.css";
 
@@ -119,7 +119,7 @@ export function Standings() {
   const listRows = slide ? slide.rows.filter(row => !podium.includes(row)) : [];
   const move = (row: DisplayRow) => slide ? moves.get(`${slide.id}:${row.id}`) ?? 0 : 0;
   const score = (row: DisplayRow) => row.result ?? `${Number(row.points.toFixed(2))} PTS`;
-  return <PageShell bare><section className="presentation">
+  return <PageShell><section className="presentation">
     <div className="stand-tabs">{modes.map(m => <button key={m} aria-pressed={mode === m} className={mode === m ? "active" : ""} onClick={() => {setMode(m); setIndex(0);}}>{m}</button>)}</div>
     <div className="stand-title">
       <div>
@@ -151,7 +151,7 @@ export function Standings() {
     </div>
     <p className="page-indicator">{slide && (auto && isMobile ? "Top 5" : `Page ${slide.page + 1} of ${slide.pages}`)} · {auto ? "Advancing every 6.5 seconds" : "Manual display"}</p>
     {fullscreenError && <p className="form-message">{fullscreenError}</p>}
-  </section><BottomNav/></PageShell>;
+  </section></PageShell>;
 }
 
 function Movement({ value }: { value: number }) {
