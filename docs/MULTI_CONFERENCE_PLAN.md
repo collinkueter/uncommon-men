@@ -33,7 +33,7 @@ The existing single conference migrates to `conferences/uncommon-men-2026` (name
 
 ## Legacy URLs
 
-Printed QR codes point at `https://uncommon-men.web.app/events/<eventId>`. Every legacy path (`/`, `/events`, `/events/:id`, `/standings`, `/results`, `/admin`, `/welcome`) redirects to the same path under `/c/<defaultConferenceId>/`, preserving `?demo=1`.
+Printed QR codes point at `https://uncommon-men.web.app/events/<eventId>`. Every legacy path (`/events`, `/events/:id`, `/standings`, `/results`, `/admin`, `/welcome`, unknown paths) redirects to the same path under `/c/<defaultConferenceId>/`, preserving `?demo=1`. `/` is the conference directory and `/organizer` the organizer area (Phases 3 and 4).
 
 ## Event signs
 

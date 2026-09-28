@@ -13,7 +13,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:5173/?demo=1` for the explicit local demonstration; it redirects to `/c/uncommon-men-2026/...?demo=1`. Demo data is isolated from Firebase and stored per conference slug in the browser, so `/c/<any-slug>/events?demo=1` shows a separate sample conference. Open the same URL without `demo=1` for live Firebase. Demo administrator access never grants a Firebase administrator role.
+Open `http://localhost:5173/?demo=1` for the explicit local demonstration: the conference directory, with the sample conference at `/c/uncommon-men-2026/...?demo=1`. Demo data is isolated from Firebase and stored in the browser: the demo platform (conference list, default conference, organizers, conference admins) and each conference's data per slug, so `/c/<any-slug>/events?demo=1` shows a separate sample conference. In demo mode the demo administrator is also an organizer, so `/organizer?demo=1` can create, archive and configure conferences locally. Open the same URL without `demo=1` for live Firebase. Demo administrator access never grants a Firebase administrator role.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Open `http://localhost:5173/?demo=1` for the explicit local demonstration; it re
 - Firebase web SDK 12.19.0, verified against the package registry on September 22, 2026.
 - Anonymous Firebase Authentication gives each browser a stable recorder UID; the display name is self-reported. Google sign-in plus an organizer or conference-admin role protects administration (see [Conferences and roles](#conferences-and-roles)).
 - Firestore Enterprise native database `conference`, region `us-central1`, with realtime updates enabled.
-- Multiple conferences share one deployment. Every URL is prefixed with the conference slug: `/c/:slug/{welcome,events,events/:eventId,standings,results,admin}`. Legacy paths (`/`, `/events`, `/events/:eventId`, `/standings`, `/results`, `/admin`, `/welcome`, and unknown paths, as printed on QR codes) redirect to the same path under `/c/<defaultConferenceId>/`, keeping the query string (`?demo=1`). The default comes from `settings/platform`, read once per page, falling back to `uncommon-men-2026`.
+- Multiple conferences share one deployment. `/` is the conference directory (live conferences first, then "Past conferences"; drafts only for organizers; a filter appears above six conferences) and `/organizer` is the organizer area. Every conference URL is prefixed with the conference slug: `/c/:slug/{welcome,events,events/:eventId,standings,results,admin}`, and its header shows the conference name with a switcher to the other conferences. Legacy paths (`/events`, `/events/:eventId`, `/standings`, `/results`, `/admin`, `/welcome`, and unknown paths, as printed on QR codes) redirect to the same path under `/c/<defaultConferenceId>/`, keeping the query string (`?demo=1`). The default comes from `settings/platform`, read once per page, falling back to `uncommon-men-2026`.
 - `ConferenceProvider` (`src/lib/ConferenceContext.tsx`) takes the conference id from the route and creates one store per conference with `createConferenceStore(conferenceId)` (`src/data/store.ts`); switching conferences disposes the previous store. The Firebase app, Auth and Firestore instances are page-wide singletons (`src/data/firebase.ts`). Internal links go through `useConferenceLink()` (`src/ui/shared.tsx`), which adds the `/c/<slug>` prefix and `?demo=1`.
 - A missing conference, or a draft the viewer may not see, shows "Conference not found". In an archived conference every entry form is disabled with a read-only notice, and the store and rules reject writes.
 - Firestore snapshot listeners propagate saves and corrections without refreshing. Realtime subscriptions are required for presentation mode; one-shot database pipeline queries do not fulfill this requirement.
@@ -54,6 +54,10 @@ Roles (emails are lowercased document ids; email roles require a Google sign-in 
 | Recorder | Anonymous or Google sign-in | Enter results and sign up within a live conference |
 
 `firestore.rules` implements this with `organizer()` and `conferenceAdmin(cid)`; inside `match /conferences/{cid}`, `admin()` is `conferenceAdmin(cid)`. Draft conferences and their data are readable only by `conferenceAdmin(cid)`; archived conferences reject every subcollection write. Every write stays audited: conference data (including the conference document and its admins) in `conferences/{cid}/audit`, platform settings and organizer roles in `platformAudit`. Revoking a role deletes its document together with an audit entry whose id is `<grant auditId>-revoke`.
+
+Platform data outside a conference (the conference list, `settings/platform`, `platformRoles`, `platformAudit`) is served by a separate page-wide store, `createPlatformStore()` in `src/data/platform.ts` (realtime listeners; browser-local under `?demo=1`), through `usePlatform()` (`src/lib/PlatformContext.tsx`). Its audited writes live in `src/data/platformWrites.ts` and are exercised directly by the rules tests. Everyone but organizers lists conferences with `where('status', 'in', ['live', 'archived'])`, because rules are not filters. A conference admin whose conference is still a draft reaches it by its link; the directory lists drafts only for organizers.
+
+Creating a conference (`planConferenceCreation` in `src/domain/conferences.ts`) writes, as document + audit pairs: the conference as a draft, the creator's identity in it (catalog audits must name a conference identity, so the creator joins that conference's roster under their Google name when they open it), the initial admins, every category and the selected events of the source (the built-in catalog or another conference; participants, teams and results are never copied). Pairs are committed in batches of at most five so each batch stays within the rules' limit of 20 document lookups, and a conference requested live is published only after every batch succeeded.
 
 The app's `Identity.admin` means "conference admin of this conference" and `Identity.organizer` means organizer; the store computes both from the custom claim and live listeners on the signed-in verified email's `platformRoles` and `admins` documents, so email-based grants and revocations apply without signing in again.
 
@@ -110,7 +114,19 @@ After an administrator role change, sign out and sign in again to refresh the Fi
 
 ### Admin access
 
-Administrators must first sign in with Google. The admin panel is available at `/c/<slug>/admin` (legacy `/admin` redirects to the default conference) for organizers and that conference's admins. Organizer and conference-admin roles are Firestore documents keyed by the Google email and take effect without signing in again:
+Administrators must first sign in with Google. The admin panel is available at `/c/<slug>/admin` (legacy `/admin` redirects to the default conference) for organizers and that conference's admins; its Conference tab edits the conference's name, dates and location (conference admins, while it is not archived), lists its admins, and for organizers changes its status, grants and revokes its admins, and links to `/organizer`. Organizer and conference-admin roles are Firestore documents keyed by the lowercased Google email and take effect without signing in again.
+
+#### Organizer area (`/organizer`)
+
+Organizers sign in with Google at `/organizer` to:
+
+- create conferences (name, web address suggested from the name, dates, location, draft or live, starting events from the built-in catalog or copied from another conference with per-event checkboxes, optional conference-admin emails);
+- publish, archive and unarchive conferences, edit their details, manage each conference's admins, and set the default conference (where legacy links and printed QR codes land);
+- add and revoke organizers, and review organizer activity (`platformAudit`).
+
+To add Randy as an organizer from the app: sign in at `https://uncommon-men.web.app/organizer` with an organizer account, open **Organizers**, enter Randy's Google email and choose **Add organizer**. Randy then signs in at `/organizer` with that same Google account (it must be the Google account for that exact email); access applies immediately. Revoke it from the same list. Organizers holding the legacy `admin` custom claim are not listed there; manage them with the CLI below.
+
+The same roles can be granted from the operator CLI:
 
 ```sh
 npx tsx scripts/admin-access.ts grant-organizer randy@example.com
