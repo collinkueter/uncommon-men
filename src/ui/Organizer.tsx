@@ -516,8 +516,7 @@ function OrganizersTab({ snapshot }: { snapshot: PlatformSnapshot }) {
       {message && <p className="form-message" role="status">{message}</p>}
       <p className="role-help">
         The person must sign in with that Google account; access applies right away. Accounts with the legacy
-        administrator claim are also organizers but are not listed here: they are managed with the operator CLI
-        (<code>scripts/admin-access.ts grant|revoke</code>).
+        administrator claim are also organizers but are not listed here.
       </p>
     </>
   );
