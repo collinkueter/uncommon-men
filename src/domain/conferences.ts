@@ -137,6 +137,63 @@ export function filterConferences(conferences: Conference[], query: string): Con
   });
 }
 
+/**
+ * The conference a new one most likely repeats: the latest start date, then
+ * the most recently created. Drafts count, since an organizer may have
+ * prepared next year's catalog before publishing it.
+ */
+export function latestConference(conferences: Conference[]): Conference | undefined {
+  return [...conferences].sort(
+    (a, b) =>
+      (b.startDate || "").localeCompare(a.startDate || "") ||
+      (b.createdAt ?? 0) - (a.createdAt ?? 0) ||
+      a.name.localeCompare(b.name),
+  )[0];
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Whether `event` from another conference is already in `target`: the same id
+ * (catalog events keep their id across conferences) or the same name.
+ */
+export function eventAlreadyPresent(event: Competition, target: { events: Competition[] }): boolean {
+  return target.events.some((item) => item.id === event.id || sameName(item.name, event.name));
+}
+
+/**
+ * What importing `events` into an existing conference writes: the chosen
+ * events that are not already present, and the categories they need that the
+ * target lacks (matched by id, then by name, so a renamed id is reused).
+ */
+export function planCatalogImport(
+  source: CatalogCopy,
+  target: { categories: Category[]; events: Competition[] },
+  eventIds: Iterable<string>,
+): CatalogCopy {
+  const chosen = new Set(eventIds);
+  const byId = new Map(target.categories.map((item) => [item.id, item]));
+  const categories: Category[] = [];
+  const categoryFor = new Map<string, string>();
+  const events = copyCatalog({ categories: [], events: source.events }).events
+    .filter((event) => chosen.has(event.id) && !eventAlreadyPresent(event, target))
+    .map((event) => {
+      if (!categoryFor.has(event.categoryId)) {
+        const sourceCategory = source.categories.find((item) => item.id === event.categoryId);
+        const match =
+          byId.get(event.categoryId) ??
+          (sourceCategory && target.categories.find((item) => sameName(item.name, sourceCategory.name)));
+        if (match) categoryFor.set(event.categoryId, match.id);
+        else if (sourceCategory) {
+          categories.push(copyCatalog({ categories: [sourceCategory], events: [] }).categories[0]);
+          categoryFor.set(event.categoryId, sourceCategory.id);
+        } else categoryFor.set(event.categoryId, target.categories[0]?.id ?? event.categoryId);
+      }
+      return { ...event, categoryId: categoryFor.get(event.categoryId)! };
+    });
+  return { categories, events };
+}
+
 /** Show the directory filter once the list is long enough to need it. */
 export const DIRECTORY_FILTER_THRESHOLD = 6;
 

@@ -6,12 +6,15 @@ import {
   detailsError,
   directorySections,
   emailError,
+  eventAlreadyPresent,
   filterConferences,
   formatDateRange,
+  latestConference,
   normalizeEmail,
   removesLastOrganizer,
   PAIRS_PER_CHUNK,
   parseEmailList,
+  planCatalogImport,
   planConferenceCreation,
   resolveServerTime,
   SERVER_TIME,
@@ -243,5 +246,40 @@ describe("removesLastOrganizer", () => {
     expect(removesLastOrganizer(["randy@example.com", "collin@example.com"], "randy@example.com")).toBe(false);
     expect(removesLastOrganizer(["randy@example.com"], "someone@example.com")).toBe(false);
     expect(removesLastOrganizer([], "randy@example.com")).toBe(false);
+  });
+});
+
+describe("latestConference", () => {
+  const conf = (id: string, startDate: string, createdAt?: number) =>
+    ({ id, slug: id, name: id, startDate, endDate: startDate, location: "", status: "live", createdAt }) as const;
+  it("picks the latest start date, then the newest", () => {
+    expect(latestConference([conf("a", "2025-10-01"), conf("b", "2026-10-01"), conf("c", "")])?.id).toBe("b");
+    expect(latestConference([conf("a", "", 1), conf("b", "", 5)])?.id).toBe("b");
+    expect(latestConference([])).toBeUndefined();
+  });
+});
+
+describe("planCatalogImport", () => {
+  const source = copyCatalog({ categories: initialCategories, events: initialEvents });
+  it("skips events already present by id or name and adds only missing categories", () => {
+    const [kept, renamed, fresh] = source.events;
+    const target = {
+      categories: source.categories.filter((c) => c.id !== fresh.categoryId),
+      events: [kept, { ...renamed, id: "other-id" }],
+    };
+    expect(eventAlreadyPresent(kept, target)).toBe(true);
+    expect(eventAlreadyPresent(renamed, target)).toBe(true);
+    const plan = planCatalogImport(source, target, [kept.id, renamed.id, fresh.id]);
+    expect(plan.events.map((e) => e.id)).toEqual([fresh.id]);
+    const needsCategory = !target.categories.some((c) => c.id === fresh.categoryId);
+    expect(plan.categories.map((c) => c.id)).toEqual(needsCategory ? [fresh.categoryId] : []);
+  });
+  it("reuses a target category with the same name", () => {
+    const event = source.events[0];
+    const category = source.categories.find((c) => c.id === event.categoryId)!;
+    const target = { categories: [{ ...category, id: "local" }], events: [] };
+    const plan = planCatalogImport(source, target, [event.id]);
+    expect(plan.categories).toEqual([]);
+    expect(plan.events[0].categoryId).toBe("local");
   });
 });

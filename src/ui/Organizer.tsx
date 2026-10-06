@@ -17,6 +17,7 @@ import {
   emailError,
   formatDateRange,
   LAST_ORGANIZER_ERROR,
+  latestConference,
   normalizeEmail,
   parseEmailList,
   slugError,
@@ -193,7 +194,10 @@ function NewConferenceForm({ snapshot, onCreated }: { snapshot: PlatformSnapshot
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
   const [status, setStatus] = useState<"draft" | "live">("draft");
-  const [source, setSource] = useState(BUILT_IN);
+  const [pickedSource, setSource] = useState<string | null>(null);
+  // Until the organizer picks one, start from the latest conference: most
+  // years repeat last year's events.
+  const source = pickedSource ?? latestConference(snapshot.conferences)?.id ?? BUILT_IN;
   const [catalog, setCatalog] = useState<CatalogCopy | null>(null);
   const [catalogError, setCatalogError] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());

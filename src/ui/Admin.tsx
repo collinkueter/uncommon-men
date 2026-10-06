@@ -1,16 +1,35 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Building2,
   CalendarDays,
   Clock3,
+  Download,
+  Hash,
   FileText,
+  ListChecks,
+  Pencil,
+  Plus,
   QrCode,
+  Ruler,
+  Search,
   Settings,
   ShieldCheck,
+  Swords,
+  Timer,
+  Trophy,
+  UserPlus,
   Users,
+  X,
+  type LucideIcon,
 } from "lucide-react";
-import { statusAction } from "@/domain/conferences";
+import {
+  eventAlreadyPresent,
+  latestConference,
+  planCatalogImport,
+  statusAction,
+  type CatalogCopy,
+} from "@/domain/conferences";
 import { usePlatform } from "@/lib/PlatformContext";
 import { ConferenceAdmins, ConferenceDetailsForm } from "./ConferenceManagement";
 import { useConference } from "@/lib/ConferenceContext";
@@ -20,38 +39,153 @@ import type {
   Attempt,
   Competition,
   ConferenceStore,
+  Participant,
 } from "@/domain/types";
 import { Audit, Button, PageShell, nowId, useConferenceLink, withDemo } from "./shared";
 import { ThemedSelect } from "./ThemedSelect";
 
+const KIND_LABELS: Record<Competition["kind"], string> = {
+  count: "Count",
+  duration: "Duration",
+  distance: "Distance",
+  bracket: "Bracket",
+  knockout: "Single-winner game",
+};
+
+function ParticipantRow({
+  participant,
+  snapshot,
+  execute,
+  onCorrect,
+}: {
+  participant: Participant;
+  snapshot: AppSnapshot;
+  execute: ConferenceStore["execute"];
+  onCorrect: (attempt: Attempt) => void;
+}) {
+  const [mode, setMode] = useState<"idle" | "rename" | "results">("idle");
+  const [name, setName] = useState(participant.name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const attempts = snapshot.data.attempts.filter((a) => a.participantId === participant.id);
+  const teams = snapshot.data.teams.filter((t) => t.memberIds.includes(participant.id));
+  const eventFor = (id: string) => snapshot.data.events.find((e) => e.id === id);
+  const rename = async () => {
+    const next = name.trim();
+    if (saving || !next) return;
+    if (next === participant.name) {
+      setMode("idle");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await execute({
+        type: "renameParticipant",
+        id: participant.id,
+        name: next,
+        reason: "Administrator rename",
+      });
+      setMode("idle");
+    } catch {
+      setError("Could not rename this participant.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const meta = [
+    `${attempts.length} ${attempts.length === 1 ? "result" : "results"}`,
+    teams.length ? `${teams.length} ${teams.length === 1 ? "team" : "teams"}` : "",
+  ].filter(Boolean);
+  return (
+    <article className={`admin-row${mode !== "idle" ? " open" : ""}`}>
+      <div className="admin-row-head">
+        <div className="admin-row-main">
+          <strong>{participant.name}</strong>
+          <small>{meta.join(" · ")}</small>
+        </div>
+        <div className="admin-row-actions">
+          <Button
+            type="button"
+            className={`compact${mode === "results" ? " active" : ""}`}
+            aria-expanded={mode === "results"}
+            disabled={!attempts.length}
+            onClick={() => setMode(mode === "results" ? "idle" : "results")}
+          >
+            <ListChecks aria-hidden="true" /> Results
+          </Button>
+          <Button
+            type="button"
+            className={`compact${mode === "rename" ? " active" : ""}`}
+            aria-expanded={mode === "rename"}
+            onClick={() => {
+              setName(participant.name);
+              setError("");
+              setMode(mode === "rename" ? "idle" : "rename");
+            }}
+          >
+            <Pencil aria-hidden="true" /> Rename
+          </Button>
+        </div>
+      </div>
+      {mode === "rename" && (
+        <form
+          className="admin-row-panel admin-inline-form"
+          onSubmit={(event) => { event.preventDefault(); void rename(); }}
+        >
+          <input
+            aria-label={`New name for ${participant.name}`}
+            value={name}
+            autoFocus
+            onChange={(event) => setName(event.target.value)}
+          />
+          <Button type="submit" className="primary" disabled={saving || !name.trim()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button type="button" onClick={() => setMode("idle")}>Cancel</Button>
+          {error && <p className="form-message">{error}</p>}
+        </form>
+      )}
+      {mode === "results" && (
+        <ul className="admin-row-panel admin-attempts">
+          {attempts.map((attempt) => {
+            const event = eventFor(attempt.eventId);
+            return (
+              <li key={attempt.id}>
+                <div>
+                  <span>{event?.name ?? "Unknown event"}</span>
+                  <small>{new Date(attempt.createdAt).toLocaleString()}</small>
+                </div>
+                <strong className={attempt.valid ? "" : "invalid"}>
+                  {event ? formatScore(attempt.value, event) : attempt.value}
+                  {!attempt.valid && " · invalid"}
+                </strong>
+                <Button type="button" className="compact" onClick={() => onCorrect(attempt)}>
+                  Correct
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </article>
+  );
+}
+
 function AdminParticipants({
   snapshot,
   execute,
+  onCorrect,
 }: {
   snapshot: AppSnapshot;
   execute: ConferenceStore["execute"];
+  onCorrect: (attempt: Attempt) => void;
 }) {
   const [newParticipantName, setNewParticipantName] = useState("");
   const [participantSaving, setParticipantSaving] = useState(false);
   const [participantError, setParticipantError] = useState("");
   const [participantSuccess, setParticipantSuccess] = useState("");
-  const [rename, setRename] = useState("");
-  const [id, setId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const save = async () => {
-    if (saving || !id || !rename.trim()) return;
-    setSaving(true);
-    try {
-      await execute({
-        type: "renameParticipant",
-        id,
-        name: rename.trim(),
-        reason: "Administrator rename",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
+  const [query, setQuery] = useState("");
   const addParticipant = async () => {
     const name = newParticipantName.trim();
     if (participantSaving || !name) return;
@@ -68,73 +202,409 @@ function AdminParticipants({
       setParticipantSaving(false);
     }
   };
+  const needle = query.trim().toLowerCase();
+  const participants = [...snapshot.data.participants]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter((p) => !needle || p.name.toLowerCase().includes(needle));
   return (
     <>
       <h1>PARTICIPANTS</h1>
-      <h2>ADD PARTICIPANT</h2>
-      <p>Add someone here so they can be selected for teams and brackets.</p>
-      <form onSubmit={(event) => { event.preventDefault(); void addParticipant(); }}>
-        <div className="admin-grid">
-          <label>
-            Participant name
-            <input
-              value={newParticipantName}
-              onChange={(event) => setNewParticipantName(event.target.value)}
-              placeholder="Full name"
-            />
-          </label>
-        </div>
+      <p className="muted">
+        {snapshot.data.participants.length} registered. Add someone here so they can be selected for teams and brackets.
+      </p>
+      <form
+        className="admin-inline-form"
+        onSubmit={(event) => { event.preventDefault(); void addParticipant(); }}
+      >
+        <input
+          aria-label="Participant name"
+          value={newParticipantName}
+          onChange={(event) => setNewParticipantName(event.target.value)}
+          placeholder="Full name"
+        />
         <Button
           type="submit"
           className="primary"
           disabled={participantSaving || !newParticipantName.trim()}
         >
-          {participantSaving ? "Adding…" : "Add participant"}
+          <UserPlus aria-hidden="true" /> {participantSaving ? "Adding…" : "Add"}
         </Button>
       </form>
       {participantError && <p className="form-message">{participantError}</p>}
-      {participantSuccess && <p className="form-message">{participantSuccess}</p>}
-      <h2>RENAME PARTICIPANT</h2>
-      <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <div className="admin-grid">
-        <div className="admin-field">
-          <label htmlFor="admin-participant">Participant</label>
-          <ThemedSelect
-            id="admin-participant"
-            label="Participant"
-            value={id}
-            onChange={(value) => {
-              setId(value);
-              setRename(
-                snapshot.data.participants.find((p) => p.id === value)
-                  ?.name ?? "",
-              );
-            }}
-            options={[
-              { value: "", label: "Select participant" },
-              ...snapshot.data.participants.map((p) => ({
-                value: p.id,
-                label: p.name,
-              })),
-            ]}
-          />
+      {participantSuccess && <p className="form-message" role="status">{participantSuccess}</p>}
+      <h2>ALL PARTICIPANTS</h2>
+      {snapshot.data.participants.length > 0 && (
+        <div className="filters">
+          <label>
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Find a participant"
+              aria-label="Find a participant"
+            />
+          </label>
         </div>
-        <label>
-          New name
-          <input value={rename} onChange={(e) => setRename(e.target.value)} />
-        </label>
+      )}
+      {participants.length ? (
+        <div className="admin-list">
+          {participants.map((p) => (
+            <ParticipantRow
+              key={p.id}
+              participant={p}
+              snapshot={snapshot}
+              execute={execute}
+              onCorrect={onCorrect}
+            />
+          ))}
         </div>
-        <Button
-          type="submit"
-        className="primary"
-          disabled={saving || !id || !rename.trim()}
-        >
-          {saving ? "Saving…" : "Save name"}
-        </Button>
-      </form>
+      ) : (
+        <p className="empty">
+          {needle ? `No participants match “${query.trim()}”.` : "No participants yet."}
+        </p>
+      )}
     </>
   );
 }
+/** Copies events (and the categories they need) from another conference. */
+function ImportEvents({
+  snapshot,
+  execute,
+  onDone,
+}: {
+  snapshot: AppSnapshot;
+  execute: ConferenceStore["execute"];
+  onDone: () => void;
+}) {
+  const { snapshot: platform, store } = usePlatform();
+  const others = platform.conferences.filter((item) => item.id !== snapshot.conferenceId);
+  const [picked, setPicked] = useState<string | null>(null);
+  const source = picked ?? latestConference(others)?.id ?? "";
+  const [catalog, setCatalog] = useState<CatalogCopy | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState("");
+  const [error, setError] = useState("");
+  const target = snapshot.data;
+  useEffect(() => {
+    if (!source) return;
+    let current = true;
+    setCatalog(null);
+    setLoadError("");
+    store.readCatalog(source).then(
+      (result) => {
+        if (!current) return;
+        setCatalog(result);
+        setSelected(
+          new Set(
+            result.events
+              .filter((event) => event.active && !eventAlreadyPresent(event, target))
+              .map((event) => event.id),
+          ),
+        );
+      },
+      (reason: unknown) => {
+        if (current) setLoadError(reason instanceof Error ? reason.message : "Could not load those events.");
+      },
+    );
+    return () => {
+      current = false;
+    };
+    // The target only seeds the default selection; reloading on every
+    // snapshot change would wipe the organizer's picks.
+  }, [source, store]);
+  const sourceName = others.find((item) => item.id === source)?.name ?? source;
+  const importable = catalog?.events.filter((event) => !eventAlreadyPresent(event, target)) ?? [];
+  const chosen = importable.filter((event) => selected.has(event.id));
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const run = async () => {
+    if (!catalog || !chosen.length || progress) return;
+    const plan = planCatalogImport(catalog, target, chosen.map((event) => event.id));
+    const reason = `Imported from ${sourceName}`.slice(0, 500);
+    const total = plan.categories.length + plan.events.length;
+    let done = 0;
+    setError("");
+    setProgress(`Importing… 0 of ${total}`);
+    try {
+      for (const category of plan.categories) {
+        await execute({ type: "saveCategory", category, reason });
+        setProgress(`Importing… ${++done} of ${total}`);
+      }
+      for (const event of plan.events) {
+        await execute({ type: "saveEvent", event, reason });
+        setProgress(`Importing… ${++done} of ${total}`);
+      }
+      setProgress("");
+      onDone();
+    } catch (reason) {
+      setProgress("");
+      setError(
+        `${reason instanceof Error ? reason.message : "Could not import every event."} ${done} of ${total} saved; importing again skips those.`,
+      );
+    }
+  };
+  if (!others.length)
+    return <p className="empty">There are no other conferences to import events from.</p>;
+  const busy = Boolean(progress);
+  return (
+    <section className="admin-import" aria-label="Import events">
+      <div className="admin-field">
+        <label htmlFor="admin-import-source">Import events from</label>
+        <ThemedSelect
+          id="admin-import-source"
+          label="Import events from"
+          value={source}
+          onChange={setPicked}
+          options={others.map((item) => ({ value: item.id, label: `${item.name} (${item.status})` }))}
+        />
+      </div>
+      <p className="muted">
+        Scoring, units and instructions are copied. Events this conference already has (same name) are skipped.
+      </p>
+      {loadError ? (
+        <p className="form-message">{loadError}</p>
+      ) : !catalog ? (
+        <p className="muted">Loading events…</p>
+      ) : (
+        <fieldset className="event-picker" disabled={busy}>
+          <div className="form-actions">
+            <Button type="button" className="compact" onClick={() => setSelected(new Set(importable.map((event) => event.id)))}>
+              Select all
+            </Button>
+            <Button type="button" className="compact" onClick={() => setSelected(new Set())}>
+              Select none
+            </Button>
+            <span className="muted">
+              {chosen.length} of {importable.length} new events
+            </span>
+          </div>
+          {catalog.categories.map((category) => {
+            const inCategory = catalog.events.filter((event) => event.categoryId === category.id);
+            if (!inCategory.length) return null;
+            return (
+              <fieldset key={category.id} className="admin-event-group">
+                <legend>{category.name}</legend>
+                {inCategory.map((event) => {
+                  const present = eventAlreadyPresent(event, target);
+                  return (
+                    <label key={event.id} className={`check${present ? " muted" : ""}`}>
+                      <input
+                        type="checkbox"
+                        disabled={present}
+                        checked={present || selected.has(event.id)}
+                        onChange={() => toggle(event.id)}
+                      />
+                      {event.name}
+                      {present ? (
+                        <small className="muted"> (already here)</small>
+                      ) : (
+                        !event.active && <small className="muted"> (inactive)</small>
+                      )}
+                    </label>
+                  );
+                })}
+              </fieldset>
+            );
+          })}
+        </fieldset>
+      )}
+      <div className="form-actions">
+        <Button type="button" className="primary" disabled={busy || !chosen.length} onClick={() => void run()}>
+          <Download aria-hidden="true" />{" "}
+          {progress || `Import ${chosen.length} ${chosen.length === 1 ? "event" : "events"}`}
+        </Button>
+        <Button type="button" disabled={busy} onClick={onDone}>Cancel</Button>
+      </div>
+      {error && <p className="form-message" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+const KIND_ICONS: Record<Competition["kind"], LucideIcon> = {
+  count: Hash,
+  duration: Timer,
+  distance: Ruler,
+  bracket: Swords,
+  knockout: Trophy,
+};
+
+const scored = (kind: Competition["kind"]) => kind !== "bracket" && kind !== "knockout";
+
+/** One readable line: how the event is scored and who plays it. */
+function eventSummary(event: Competition) {
+  const parts: string[] = [KIND_LABELS[event.kind]];
+  if (scored(event.kind)) {
+    if (event.unit.trim()) parts.push(event.unit.trim());
+    parts.push(event.direction === "higher" ? "Higher wins" : "Lower wins");
+  }
+  if (event.team) parts.push(event.teamSize > 1 ? `Teams of ${event.teamSize}` : "Teams");
+  return parts.join(" · ");
+}
+
+/** Create or edit form for one event, shown inline where the admin opened it. */
+function EventForm({
+  snapshot,
+  execute,
+  initial,
+  creating,
+  onDone,
+}: {
+  snapshot: AppSnapshot;
+  execute: ConferenceStore["execute"];
+  initial: Competition;
+  creating: boolean;
+  onDone: (saved?: Competition) => void;
+}) {
+  const [draft, setDraft] = useState<Competition>(initial);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const update = <K extends keyof Competition>(key: K, value: Competition[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }));
+  const id = `event-${initial.id}`;
+  const categories = [...snapshot.data.categories].sort((a, b) => a.order - b.order);
+  const save = async () => {
+    if (saving || !draft.name.trim() || !draft.categoryId) return;
+    setSaving(true);
+    setError("");
+    const event = {
+      ...draft,
+      name: draft.name.trim(),
+      teamSize: draft.team ? Math.max(0, Number(draft.teamSize)) : 1,
+    };
+    try {
+      await execute({ type: "saveEvent", event, reason: "Administrator event update" });
+      onDone(event);
+    } catch {
+      setError("Could not save the event.");
+      setSaving(false);
+    }
+  };
+  return (
+    <form
+      className="event-form"
+      onSubmit={(event) => { event.preventDefault(); void save(); }}
+    >
+      <div className="admin-grid">
+        <label className="wide">
+          Name
+          <input
+            value={draft.name}
+            autoFocus={creating}
+            placeholder="e.g. Push-ups in 60 seconds"
+            onChange={(e) => update("name", e.target.value)}
+          />
+        </label>
+        <div className="admin-field">
+          <label htmlFor={`${id}-category`}>Category</label>
+          <ThemedSelect
+            id={`${id}-category`}
+            label="Category"
+            value={draft.categoryId}
+            onChange={(value) => update("categoryId", value)}
+            options={categories.map((c) => ({ value: c.id, label: c.name }))}
+          />
+        </div>
+        <div className="admin-field">
+          <label htmlFor={`${id}-scoring`}>Scoring</label>
+          <ThemedSelect
+            id={`${id}-scoring`}
+            label="Scoring"
+            value={draft.kind}
+            onChange={(value) => update("kind", value as Competition["kind"])}
+            options={(Object.keys(KIND_LABELS) as Competition["kind"][]).map((kind) => ({
+              value: kind,
+              label: KIND_LABELS[kind],
+            }))}
+          />
+        </div>
+        {scored(draft.kind) && (
+          <>
+            <div className="admin-field">
+              <label htmlFor={`${id}-direction`}>Winner</label>
+              <ThemedSelect
+                id={`${id}-direction`}
+                label="Winner"
+                value={draft.direction}
+                onChange={(value) => update("direction", value as Competition["direction"])}
+                options={[
+                  { value: "higher", label: "Higher wins" },
+                  { value: "lower", label: "Lower wins" },
+                ]}
+              />
+            </div>
+            <label>
+              Unit
+              <input
+                value={draft.unit}
+                placeholder="reps, seconds, feet…"
+                onChange={(e) => update("unit", e.target.value)}
+              />
+            </label>
+          </>
+        )}
+        <div className="event-form-checks wide">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={draft.team}
+              onChange={(e) => {
+                const team = e.target.checked;
+                setDraft((d) => ({ ...d, team, teamSize: team && d.teamSize < 2 ? 2 : d.teamSize }));
+              }}
+            />
+            Team event
+          </label>
+          {draft.team && (
+            <label className="event-team-size">
+              Players per team
+              <input
+                type="number"
+                min="0"
+                value={draft.teamSize}
+                onChange={(e) => update("teamSize", Number(e.target.value))}
+              />
+            </label>
+          )}
+          {creating && (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={draft.active}
+                onChange={(e) => update("active", e.target.checked)}
+              />
+              Active (visible to competitors)
+            </label>
+          )}
+        </div>
+        <label className="wide">
+          Instructions
+          <textarea
+            value={draft.instructions}
+            placeholder="How the event is run and judged"
+            onChange={(e) => update("instructions", e.target.value)}
+          />
+        </label>
+      </div>
+      <div className="form-actions">
+        <Button type="submit" className="primary" disabled={saving || !draft.name.trim() || !draft.categoryId}>
+          {saving ? "Saving…" : creating ? "Create event" : "Save changes"}
+        </Button>
+        <Button type="button" disabled={saving} onClick={() => onDone()}>Cancel</Button>
+      </div>
+      {error && <p className="form-message" role="alert">{error}</p>}
+    </form>
+  );
+}
+
+type EventFilter = "all" | "active" | "inactive";
+
 function AdminEvents({
   snapshot,
   execute,
@@ -143,157 +613,214 @@ function AdminEvents({
   execute: ConferenceStore["execute"];
 }) {
   const link = useConferenceLink();
-  const blank = (): Competition => ({
-    id: nowId(),
-    categoryId: snapshot.data.categories[0]?.id ?? "",
-    name: "",
-    kind: "count",
-    direction: "higher",
-    unit: "reps",
-    team: false,
-    teamSize: 1,
-    instructions: "",
-    active: true,
-  });
-  const [draft, setDraft] = useState<Competition>(blank);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const update = <K extends keyof Competition>(key: K, value: Competition[K]) =>
-    setDraft((d) => ({ ...d, [key]: value }));
-  const save = async () => {
-    if (saving || !draft.name.trim() || !draft.categoryId) return;
-    setSaving(true);
-    setError("");
+  const [creating, setCreating] = useState<Competition | undefined>();
+  const [editingId, setEditingId] = useState<string | undefined>();
+  const [importing, setImporting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<EventFilter>("all");
+  const [toggling, setToggling] = useState<string | undefined>();
+  const [message, setMessage] = useState("");
+  const [toggleError, setToggleError] = useState("");
+  const all = snapshot.data.events;
+  const activeCount = all.filter((e) => e.active).length;
+  const counts: Record<EventFilter, number> = {
+    all: all.length,
+    active: activeCount,
+    inactive: all.length - activeCount,
+  };
+  const startCreate = () => {
+    setEditingId(undefined);
+    setImporting(false);
+    setMessage("");
+    setCreating({
+      id: nowId(),
+      categoryId: [...snapshot.data.categories].sort((a, b) => a.order - b.order)[0]?.id ?? "",
+      name: "",
+      kind: "count",
+      direction: "higher",
+      unit: "reps",
+      team: false,
+      teamSize: 1,
+      instructions: "",
+      active: true,
+    });
+  };
+  const toggleActive = async (event: Competition) => {
+    if (toggling) return;
+    setToggling(event.id);
+    setToggleError("");
     try {
       await execute({
         type: "saveEvent",
-        event: {
-          ...draft,
-          name: draft.name.trim(),
-          teamSize: draft.team ? Math.max(0, Number(draft.teamSize)) : 1,
-        },
+        event: { ...event, active: !event.active },
         reason: "Administrator event update",
       });
-      setDraft(blank());
     } catch {
-      setError("Could not save the event.");
+      setToggleError(`Could not change ${event.name}. Try again.`);
     } finally {
-      setSaving(false);
+      setToggling(undefined);
     }
   };
+  const needle = query.trim().toLowerCase();
+  const visible = all
+    .filter((e) => filter === "all" || (filter === "active") === e.active)
+    .filter((e) => !needle || e.name.toLowerCase().includes(needle))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const groups = [...snapshot.data.categories]
+    .sort((a, b) => a.order - b.order)
+    .map((c) => ({ id: c.id, name: c.name, events: visible.filter((e) => e.categoryId === c.id) }));
+  const orphans = visible.filter((e) => !snapshot.data.categories.some((c) => c.id === e.categoryId));
+  if (orphans.length) groups.push({ id: "uncategorized", name: "Uncategorized", events: orphans });
   return (
     <>
-      <h1>EVENT EDITOR</h1>
-      <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <div className="admin-grid">
-        <label>
-          Name
-          <input
-            value={draft.name}
-            onChange={(e) => update("name", e.target.value)}
-          />
-        </label>
-        <div className="admin-field">
-          <label htmlFor="admin-event-scoring">Scoring</label>
-          <ThemedSelect
-            id="admin-event-scoring"
-            label="Scoring"
-            value={draft.kind}
-            onChange={(value) =>
-              update("kind", value as Competition["kind"])
-            }
-            options={[
-              { value: "count", label: "Count" },
-              { value: "duration", label: "Duration" },
-              { value: "distance", label: "Distance" },
-              { value: "bracket", label: "Bracket" },
-              { value: "knockout", label: "Single-winner game" },
-            ]}
-          />
+      <div className="admin-section-head events-head">
+        <div>
+          <h1>EVENTS</h1>
+          <p className="muted">
+            {counts.all} {counts.all === 1 ? "event" : "events"} · {counts.active} active
+          </p>
         </div>
-        <div className="admin-field">
-          <label htmlFor="admin-event-direction">Direction</label>
-          <ThemedSelect
-            id="admin-event-direction"
-            label="Direction"
-            value={draft.direction}
-            onChange={(value) =>
-              update("direction", value as Competition["direction"])
-            }
-            options={[
-              { value: "higher", label: "Higher wins" },
-              { value: "lower", label: "Lower wins" },
-            ]}
-          />
+        <div className="form-actions">
+          <Button type="button" className="compact" onClick={() => { setCreating(undefined); setImporting(true); }}>
+            <Download aria-hidden="true" /> Import
+          </Button>
+          <Button type="button" className="compact primary" onClick={startCreate}>
+            <Plus aria-hidden="true" /> New event
+          </Button>
         </div>
-        <label>
-          Unit
-          <input
-            value={draft.unit}
-            onChange={(e) => update("unit", e.target.value)}
-          />
-        </label>
-        <label>
-          Team size
-          <input
-            type="number"
-            min="0"
-            value={draft.teamSize}
-            onChange={(e) => update("teamSize", Number(e.target.value))}
-          />
-        </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={draft.team}
-            onChange={(e) => update("team", e.target.checked)}
-          />
-          Team event
-        </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={draft.active}
-            onChange={(e) => update("active", e.target.checked)}
-          />
-          Active
-        </label>
-        <label className="wide">
-          Instructions
-          <textarea
-            value={draft.instructions}
-            onChange={(e) => update("instructions", e.target.value)}
-          />
-        </label>
-        </div>
-        <Button type="submit" className="primary" disabled={saving || !draft.name.trim() || !draft.categoryId}>
-        {snapshot.data.events.some((e) => e.id === draft.id)
-          ? "Save event"
-          : "Create event"}
-        </Button>
-      </form>
-      {error && <p className="form-message">{error}</p>}
-      <div className="edit-list">
-        {snapshot.data.events.map((e) => (
-          <article key={e.id}>
-            <div>
-              <strong>{e.name}</strong>
-              <small>
-                {e.active ? "Active" : "Inactive"} · {e.kind}
-              </small>
-            </div>
-            {e.kind === "bracket" && (
-              <Link to={link(`/events/${e.id}`)}>
-                {e.team ? "Manage teams & bracket" : "Manage participants & bracket"}
-              </Link>
-            )}
-            {e.kind === "knockout" && (
-              <Link to={link(`/events/${e.id}`)}>Manage game</Link>
-            )}
-            <Button type="button" onClick={() => setDraft(e)}>Edit</Button>
-          </article>
-        ))}
       </div>
+      {importing && (
+        <ImportEvents snapshot={snapshot} execute={execute} onDone={() => setImporting(false)} />
+      )}
+      {creating && (
+        <section className="event-create" aria-label="New event">
+          <h2>NEW EVENT</h2>
+          <EventForm
+            key={creating.id}
+            snapshot={snapshot}
+            execute={execute}
+            initial={creating}
+            creating
+            onDone={(saved) => {
+              setCreating(undefined);
+              if (saved) setMessage(`${saved.name} created.`);
+            }}
+          />
+        </section>
+      )}
+      {message && <p className="form-message saved events-message" role="status">{message}</p>}
+      {toggleError && <p className="form-message events-message" role="alert">{toggleError}</p>}
+      {all.length > 0 && (
+        <div className="events-toolbar">
+          <label className="events-search">
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Find an event"
+              aria-label="Find an event"
+            />
+          </label>
+          <div className="segmented" role="group" aria-label="Show">
+            {(["all", "active", "inactive"] as EventFilter[]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+              >
+                {value} <span>{counts[value]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {visible.length === 0 ? (
+        <p className="empty">
+          {all.length === 0
+            ? "No events yet. Create one or import them from another conference."
+            : needle
+              ? `No events match “${query.trim()}”.`
+              : `No ${filter} events.`}
+        </p>
+      ) : (
+        groups
+          .filter((g) => g.events.length)
+          .map((group) => (
+            <section key={group.id} className="admin-event-group" aria-labelledby={`group-${group.id}`}>
+              <h3 id={`group-${group.id}`}>
+                {group.name} <span>{group.events.length}</span>
+              </h3>
+              <div className="admin-list">
+                {group.events.map((e) => {
+                  const Icon = KIND_ICONS[e.kind];
+                  const open = editingId === e.id;
+                  return (
+                    <article
+                      key={e.id}
+                      className={`admin-row admin-event${e.active ? "" : " inactive"}${open ? " editing" : ""}`}
+                    >
+                      <div className="admin-row-head">
+                        <span className="event-kind" title={KIND_LABELS[e.kind]}>
+                          <Icon aria-hidden="true" />
+                        </span>
+                        <div className="admin-row-main">
+                          <strong>{e.name}</strong>
+                          <small>{eventSummary(e)}</small>
+                        </div>
+                        <div className="admin-row-actions">
+                          <button
+                            type="button"
+                            role="switch"
+                            className="event-switch"
+                            aria-checked={e.active}
+                            aria-label={`${e.name} active`}
+                            disabled={toggling === e.id}
+                            onClick={() => void toggleActive(e)}
+                          >
+                            <span className="track" aria-hidden="true"><span /></span>
+                            {e.active ? "Active" : "Off"}
+                          </button>
+                          {!scored(e.kind) && (
+                            <Link className="button compact event-manage" to={link(`/events/${e.id}`)}>
+                              {e.kind === "knockout" ? <Trophy aria-hidden="true" /> : <Swords aria-hidden="true" />}
+                              {e.kind === "knockout" ? "Game" : "Bracket"}
+                            </Link>
+                          )}
+                          <Button
+                            type="button"
+                            className={`compact event-edit${open ? " active" : ""}`}
+                            aria-expanded={open}
+                            onClick={() => {
+                              setCreating(undefined);
+                              setMessage("");
+                              setEditingId(open ? undefined : e.id);
+                            }}
+                          >
+                            {open ? <X aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+                            {open ? "Close" : "Edit"}
+                          </Button>
+                        </div>
+                      </div>
+                      {open && (
+                        <div className="admin-row-panel">
+                          <EventForm
+                            snapshot={snapshot}
+                            execute={execute}
+                            initial={e}
+                            creating={false}
+                            onDone={() => setEditingId(undefined)}
+                          />
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))
+      )}
     </>
   );
 }
@@ -567,7 +1094,18 @@ export function Admin() {
             </>
           )}
           {tab === "participants" && (
-            <AdminParticipants snapshot={snapshot} execute={execute} />
+            <AdminParticipants
+              snapshot={snapshot}
+              execute={execute}
+              onCorrect={(attempt) => {
+                setSelected(attempt);
+                setValue(String(attempt.value));
+                setValid(attempt.valid);
+                setReason("");
+                setAdminError("");
+                setTab("results");
+              }}
+            />
           )}
           {tab === "events" && (
             <AdminEvents snapshot={snapshot} execute={execute} />
