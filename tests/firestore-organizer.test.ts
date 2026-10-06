@@ -165,6 +165,16 @@ describe("organizer actions", () => {
     await assertSucceeds(getDocs(collection(db, "platformAudit")));
   });
 
+  it("refuses to remove the last listed organizer", async () => {
+    const db = dbFor("randy");
+    const me = actor("randy");
+    await expect(setOrganizerRole(db, me, "randy@example.com", false)).rejects.toThrow(/last organizer/);
+    expect(await read("platformRoles/randy@example.com")).toMatchObject({ role: "organizer" });
+    await assertSucceeds(setOrganizerRole(db, me, "collin@example.com", true));
+    await assertSucceeds(setOrganizerRole(db, me, "randy@example.com", false));
+    expect(await read("platformRoles/randy@example.com")).toBeUndefined();
+  });
+
   it("refuses organizer actions to a conference admin, who may only edit their conference's details", async () => {
     const db = dbFor("adminA");
     const me = actor("adminA");

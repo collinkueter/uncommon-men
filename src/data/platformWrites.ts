@@ -17,7 +17,9 @@ import {
   copyCatalog,
   detailsError,
   emailError,
+  LAST_ORGANIZER_ERROR,
   normalizeEmail,
+  removesLastOrganizer,
   resolveServerTime,
   type CatalogCopy,
   type ConferenceChanges,
@@ -179,8 +181,14 @@ function checkedEmail(value: string) {
   return normalizeEmail(value);
 }
 
-export function setOrganizerRole(db: Firestore, actor: PlatformActor, email: string, grant: boolean) {
+export async function setOrganizerRole(db: Firestore, actor: PlatformActor, email: string, grant: boolean) {
   const key = checkedEmail(email);
+  // The rules cannot count documents, so the app refuses to remove the last
+  // listed organizer; otherwise nobody could reach /organizer again.
+  if (!grant) {
+    const organizers = await getDocs(collection(db, "platformRoles"));
+    if (removesLastOrganizer(organizers.docs.map((item) => item.id), key)) throw new Error(LAST_ORGANIZER_ERROR);
+  }
   return setRole(db, actor, doc(db, "platformRoles", key), ["platformAudit"], "platformRoles", { role: "organizer" }, grant);
 }
 

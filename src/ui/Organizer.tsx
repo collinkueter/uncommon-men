@@ -16,6 +16,7 @@ import {
   directorySections,
   emailError,
   formatDateRange,
+  LAST_ORGANIZER_ERROR,
   normalizeEmail,
   parseEmailList,
   slugError,
@@ -441,6 +442,7 @@ function OrganizersTab({ snapshot }: { snapshot: PlatformSnapshot }) {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const self = snapshot.identity?.email?.toLowerCase();
+  const onlyOne = snapshot.organizers.length === 1;
   const change = async (target: string, grant: boolean) => {
     if (grant) {
       const error = emailError(target);
@@ -478,7 +480,8 @@ function OrganizersTab({ snapshot }: { snapshot: PlatformSnapshot }) {
             <Button
               type="button"
               className="danger compact"
-              disabled={busy === organizer.email}
+              disabled={onlyOne || busy === organizer.email}
+              title={onlyOne ? LAST_ORGANIZER_ERROR : undefined}
               onClick={() => void change(organizer.email, false)}
               aria-label={`Revoke ${organizer.email}`}
             >

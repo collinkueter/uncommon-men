@@ -29,8 +29,10 @@ import {
   copyCatalog,
   detailsError,
   emailError,
+  LAST_ORGANIZER_ERROR,
   normalizeEmail,
   planConferenceCreation,
+  removesLastOrganizer,
   resolveServerTime,
   type CatalogCopy,
   type ConferenceChanges,
@@ -598,6 +600,8 @@ class DemoPlatformStore extends BasePlatformStore {
     await this.run(async () => {
       this.requireOrganizer();
       const current = readDemoPlatform();
+      const listed = current.organizers.map((item) => item.email);
+      if (!grant && removesLastOrganizer(listed, email)) throw new Error(LAST_ORGANIZER_ERROR);
       const change = this.changeRole(current.organizers, email, grant, "platformRoles", grant ? "grantOrganizer" : "revokeOrganizer");
       if (!change.entry) return;
       writeDemoPlatform((state) => ({ ...state, organizers: change.list, audit: [change.entry!, ...state.audit] }));

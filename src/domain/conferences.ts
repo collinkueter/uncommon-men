@@ -40,6 +40,14 @@ export function normalizeEmail(value: string): string {
 }
 
 const EMAIL_PATTERN = /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/;
+
+export const LAST_ORGANIZER_ERROR = "You can't remove the last organizer. Add another organizer first.";
+
+/** Whether revoking `email` would leave no organizer in the list of organizer emails. */
+export function removesLastOrganizer(organizers: readonly string[], email: string): boolean {
+  const key = normalizeEmail(email);
+  return organizers.includes(key) && organizers.every((item) => item === key);
+}
 export function emailError(value: string): string | null {
   const email = normalizeEmail(value);
   if (!email) return "Enter a Google account email.";

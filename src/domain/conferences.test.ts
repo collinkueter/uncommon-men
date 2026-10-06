@@ -9,6 +9,7 @@ import {
   filterConferences,
   formatDateRange,
   normalizeEmail,
+  removesLastOrganizer,
   PAIRS_PER_CHUNK,
   parseEmailList,
   planConferenceCreation,
@@ -233,5 +234,14 @@ describe("conference creation plan", () => {
     expect(resolveServerTime({ a: SERVER_TIME, b: { c: SERVER_TIME, d: [1] }, e: null }, 5)).toEqual({
       a: 5, b: { c: 5, d: [1] }, e: null,
     });
+  });
+});
+
+describe("removesLastOrganizer", () => {
+  it("is true only when the email is the sole listed organizer", () => {
+    expect(removesLastOrganizer(["randy@example.com"], " Randy@Example.com ")).toBe(true);
+    expect(removesLastOrganizer(["randy@example.com", "collin@example.com"], "randy@example.com")).toBe(false);
+    expect(removesLastOrganizer(["randy@example.com"], "someone@example.com")).toBe(false);
+    expect(removesLastOrganizer([], "randy@example.com")).toBe(false);
   });
 });
